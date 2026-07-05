@@ -1,0 +1,26 @@
+{
+  "name": "telegram-ai-video-bot",
+  "version": "1.0.0",
+  "description": "Telegram Bot AI Video Generator powered by BytePlus Seedance API",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node --watch bot.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "ai",
+    "video",
+    "seedance",
+    "byteplus"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "grammy": "^1.35.0",
+    "dotenv": "^16.4.7"
+  }
+}
