@@ -23,83 +23,99 @@ function getUserSettings(userId) {
 // ─── Bot Instance ────────────────────────────────────────────────────────────
 const bot = new Bot(config.telegramToken);
 
-// ─── /start Command ──────────────────────────────────────────────────────────
-bot.command("start", async (ctx) => {
+// ─── Main Menu ───────────────────────────────────────────────────────────────
+function mainMenuKeyboard() {
+  return new InlineKeyboard()
+    .text("🎬 Generate Video", "menu:generate")
+    .text("⚙️ Settings", "menu:settings")
+    .row()
+    .text("🤖 Model", "menu:model")
+    .text("📐 Ratio", "menu:ratio")
+    .row()
+    .text("🖥️ Resolution", "menu:resolution")
+    .text("⏱ Duration", "menu:duration")
+    .row()
+    .text("❓ Help", "menu:help");
+}
+
+async function showMainMenu(ctx, text = null) {
   const name = ctx.from?.first_name || "User";
-  await ctx.reply(
-    `🎬 *Selamat datang di AI Video Generator Bot!* (${name})\n\n` +
-      `Bot ini mendukung beberapa platform generator video AI terbaik sekaligus!\n\n` +
-      `🤖 *Platform yang Didukung:*\n` +
-      `• *BytePlus Seedance* (Pro/Fast/Mini)\n` +
-      `• *Kling AI* (v3.1 / v2.6)\n` +
-      `• *Hailuo / MiniMax* (v2 / v1)\n` +
-      `• *Luma Dream Machine* (Ray-2)\n` +
-      `• *Runway* (Gen-4.5 / Gen-3)\n` +
-      `• *Google Veo 2*\n` +
-      `• *Leonardo AI* (Motion 2.0 / Motion 2.0 Fast)\n\n` +
-      `🎯 *Cara penggunaan:*\n\n` +
-      `1️⃣ *Text-to-Video:*\n` +
-      `   Ketik /generate diikuti prompt Anda\n` +
-      `   Contoh: \`/generate Cinematic drone shot of a tropical island at sunset\`\n\n` +
-      `2️⃣ *Image-to-Video:*\n` +
-      `   Kirim foto dengan caption berisi prompt\n` +
-      `   Bot akan menggunakan gambar sebagai referensi/first frame\n\n` +
-      `📋 *Commands:*\n` +
-      `  /generate — Generate video dari prompt\n` +
-      `  /settings — Lihat model & konfigurasi aktif\n` +
-      `  /model — Ganti provider atau model AI\n` +
-      `  /ratio — Set aspect ratio\n` +
-      `  /resolution — Set resolusi video (480p, 720p, 1080p, 4k)\n` +
-      `  /duration — Set durasi video\n` +
-      `  /help — Bantuan lengkap`,
-    { parse_mode: "Markdown" }
-  );
-});
-
-// ─── /help Command ───────────────────────────────────────────────────────────
-bot.command("help", async (ctx) => {
-  await ctx.reply(
-    `📖 *Panduan Lengkap AI Video Generator Multi-Model*\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🎬 *GENERATE VIDEO*\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `*Text-to-Video:*\n` +
-      `\`/generate <prompt>\`\n` +
-      `Contoh:\n` +
-      `\`/generate A majestic eagle soaring over snow-capped mountains, cinematic 4K footage\`\n\n` +
-      `*Image-to-Video:*\n` +
-      `Kirim foto ke bot dengan caption yang berisi deskripsi gerakan/animasi.\n` +
-      `Bot akan menggunakan foto sebagai first frame.\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `⚙️ *GANTI PLATFORM & MODEL*\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `Gunakan command \`/model <nama_provider>\` untuk berganti provider:\n` +
-      `• \`/model byteplus\` — Switch ke BytePlus Seedance\n` +
-      `• \`/model kling\` — Switch ke Kling AI\n` +
-      `• \`/model hailuo\` — Switch ke Hailuo / MiniMax\n` +
-      `• \`/model luma\` — Switch ke Luma Dream Machine\n` +
-      `• \`/model runway\` — Switch ke Runway\n` +
-      `• \`/model veo\` — Switch ke Google Veo 2\n` +
-      `• \`/model leonardo\` — Switch ke Leonardo AI\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `⚙️ *PENGATURAN PARAMETER*\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `• \`/ratio 16:9\` — Landscape (16:9, 9:16, 1:1, 21:9, 4:3, 3:4)\n` +
-      `• \`/resolution 720p\` — Resolusi video (\`480p\`, \`720p\`, \`1080p\`, \`4k\`)\n` +
-      `• \`/duration auto\` — Durasi otomatis (atau angka 4-15 detik)\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `💡 *INFO API KEYS*\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-      `Setiap provider membutuhkan konfigurasi API Key masing-masing di file \`.env\`. Jika kunci belum diisi, bot akan memberi tahu saat Anda mencoba men-generate video.`,
-    { parse_mode: "Markdown" }
-  );
-});
-
-// ─── /settings Command ──────────────────────────────────────────────────────
-bot.command("settings", async (ctx) => {
   const s = getUserSettings(ctx.from.id);
   const providerInfo = config.PROVIDERS[s.provider];
 
+  const msg = text || (
+    `🎬 *AI Video Generator Bot*\n\n` +
+    `Halo *${name}*! 👋\n\n` +
+    `🔌 *Platform aktif:* ${providerInfo.name}\n` +
+    `📐 *Ratio:* ${s.ratio} | 🖥️ *Res:* ${s.resolution || "720p"}\n\n` +
+    `👇 Pilih menu di bawah:`
+  );
+
+  await ctx.reply(msg, {
+    parse_mode: "Markdown",
+    reply_markup: mainMenuKeyboard(),
+  });
+}
+
+// ─── /start Command ──────────────────────────────────────────────────────────
+bot.command("start", async (ctx) => {
+  await showMainMenu(ctx);
+});
+
+// ─── Main Menu Callback Handler ────────────────────────────────────────────
+bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
+  const action = ctx.match[1];
+  await ctx.answerCallbackQuery();
+
+  switch (action) {
+    case "generate":
+      await ctx.reply(
+        `🎬 *Generate Video*\n\nKetik prompt kamu di bawah:\n\n` +
+        `Contoh:\n` +
+        `\`/generate A golden retriever running on the beach at sunset\``,
+        { parse_mode: "Markdown" }
+      );
+      break;
+    case "settings":
+      await showSettings(ctx);
+      break;
+    case "model":
+      await showModelPicker(ctx);
+      break;
+    case "ratio":
+      await showRatioPicker(ctx);
+      break;
+    case "resolution":
+      await showResolutionPicker(ctx);
+      break;
+    case "duration":
+      await showDurationPicker(ctx);
+      break;
+    case "main":
+      await showMainMenu(ctx);
+      return;
+    case "help":
+      await ctx.reply(
+        `📖 *Panduan Lengkap*\n\n` +
+        `🎬 *Generate Video:*\n` +
+        `Ketik \`/generate <prompt>\` atau klik *Generate Video* di menu\n\n` +
+        `🖼 *Image-to-Video:*\n` +
+        `Kirim foto dengan caption/prompt\n\n` +
+        `⚙️ *Pengaturan:*\n` +
+        `Gunakan menu untuk ganti model, ratio, resolusi, durasi\n\n` +
+        `🤖 *Platform:* BytePlus, Kling, Hailuo, Luma, Runway, Veo, Leonardo`,
+        { parse_mode: "Markdown" }
+      );
+      break;
+  }
+});
+
+// ─── Shared functions ──────────────────────────────────────────────────────
+async function showSettings(ctx) {
+  const s = getUserSettings(ctx.from.id);
+  const providerInfo = config.PROVIDERS[s.provider];
+
+  const keyboard = new InlineKeyboard().text("🏠 Main Menu", "menu:main");
   await ctx.reply(
     `⚙️ *Pengaturan Saat Ini*\n\n` +
       `🔌 Platform: *${providerInfo.name}*\n` +
@@ -107,30 +123,12 @@ bot.command("settings", async (ctx) => {
       `📐 Aspect Ratio: *${s.ratio}*\n` +
       `🖥️ Resolusi: *${s.resolution || "720p"}*\n` +
       `⏱ Durasi: *${s.duration === "auto" ? "Auto" : s.duration + " detik"}*\n` +
-      `🔊 Audio: *${s.generateAudio ? "Ya" : "Tidak"}*\n\n` +
-      `_Ubah pengaturan dengan command:_\n` +
-      `- \`/model <nama_platform>\`\n` +
-      `- \`/ratio <ratio>\`\n` +
-      `- \`/resolution <resolusi>\`\n` +
-      `- \`/duration <durasi>\``,
-    { parse_mode: "Markdown" }
+      `🔊 Audio: *${s.generateAudio ? "Ya" : "Tidak"}*\n`,
+    { parse_mode: "Markdown", reply_markup: keyboard }
   );
-});
+}
 
-// ─── /model Command ──────────────────────────────────────────────────────────
-bot.command("model", async (ctx) => {
-  const arg = ctx.match?.trim().toLowerCase();
-
-  if (arg && config.PROVIDERS[arg]) {
-    const s = getUserSettings(ctx.from.id);
-    s.provider = arg;
-    s.model = config.PROVIDERS[arg].defaultModel;
-
-    const targetName = config.PROVIDERS[arg].name;
-    await ctx.reply(`✅ Platform berhasil diubah ke *${targetName}*\nModel default: \`${s.model}\``, { parse_mode: "Markdown" });
-    return;
-  }
-
+async function showModelPicker(ctx) {
   const s = getUserSettings(ctx.from.id);
   const activeProviderName = config.PROVIDERS[s.provider].name;
 
@@ -144,31 +142,18 @@ bot.command("model", async (ctx) => {
     .text("Runway", "set_provider:runway")
     .text("Google Veo 2", "set_provider:veo")
     .row()
-    .text("Leonardo AI", "set_provider:leonardo");
+    .text("Leonardo AI", "set_provider:leonardo")
+    .row()
+    .text("🏠 Main Menu", "menu:main");
 
   await ctx.reply(
     `🤖 *Pilih Platform Generator Video AI*\n\n` +
-      `Platform aktif saat ini: *${activeProviderName}*\n\n` +
-      `Klik tombol di bawah ini untuk mengganti platform secara instan:`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: keyboard,
-    }
+      `Platform aktif saat ini: *${activeProviderName}*`,
+    { parse_mode: "Markdown", reply_markup: keyboard }
   );
-});
+}
 
-// ─── /ratio Command ──────────────────────────────────────────────────────────
-// ─── /ratio Command ──────────────────────────────────────────────────────────
-bot.command("ratio", async (ctx) => {
-  const arg = ctx.match?.trim();
-
-  if (arg && config.ASPECT_RATIOS.includes(arg)) {
-    const s = getUserSettings(ctx.from.id);
-    s.ratio = arg;
-    await ctx.reply(`✅ Aspect ratio diubah ke *${arg}*`, { parse_mode: "Markdown" });
-    return;
-  }
-
+async function showRatioPicker(ctx) {
   const s = getUserSettings(ctx.from.id);
   const keyboard = new InlineKeyboard()
     .text("16:9 (Landscape)", "set_ratio:16:9")
@@ -178,17 +163,93 @@ bot.command("ratio", async (ctx) => {
     .text("21:9 (Cinematic)", "set_ratio:21:9")
     .row()
     .text("4:3 (Classic TV)", "set_ratio:4:3")
-    .text("3:4 (Vertical Feed)", "set_ratio:3:4");
+    .text("3:4 (Vertical Feed)", "set_ratio:3:4")
+    .row()
+    .text("🏠 Main Menu", "menu:main");
 
   await ctx.reply(
-    `📐 *Pilih Aspect Ratio Video*\n\n` +
-      `Ratio saat ini: *${s.ratio}*\n\n` +
-      `Silakan klik tombol di bawah untuk memilih ratio:`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: keyboard,
-    }
+    `📐 *Pilih Aspect Ratio*\nRatio saat ini: *${s.ratio}*`,
+    { parse_mode: "Markdown", reply_markup: keyboard }
   );
+}
+
+async function showResolutionPicker(ctx) {
+  const s = getUserSettings(ctx.from.id);
+  const current = s.resolution || "720p";
+  const keyboard = new InlineKeyboard()
+    .text("480p (Standard)", "set_resolution:480p")
+    .text("720p (HD/Default)", "set_resolution:720p")
+    .row()
+    .text("1080p (FHD)", "set_resolution:1080p")
+    .text("4k (UHD/Premium)", "set_resolution:4k")
+    .row()
+    .text("🏠 Main Menu", "menu:main");
+
+  await ctx.reply(
+    `🖥️ *Pilih Resolusi*\nResolusi saat ini: *${current}*`,
+    { parse_mode: "Markdown", reply_markup: keyboard }
+  );
+}
+
+async function showDurationPicker(ctx) {
+  const s = getUserSettings(ctx.from.id);
+  const current = s.duration === "auto" ? "Auto" : `${s.duration} detik`;
+  const keyboard = new InlineKeyboard()
+    .text("Auto", "set_duration:auto")
+    .text("5 Detik", "set_duration:5")
+    .row()
+    .text("8 Detik", "set_duration:8")
+    .text("10 Detik", "set_duration:10")
+    .row()
+    .text("15 Detik", "set_duration:15")
+    .row()
+    .text("🏠 Main Menu", "menu:main");
+
+  await ctx.reply(
+    `⏱ *Pilih Durasi*\nDurasi saat ini: *${current}*`,
+    { parse_mode: "Markdown", reply_markup: keyboard }
+  );
+}
+
+// ─── /settings Command ──────────────────────────────────────────────────────
+bot.command("settings", async (ctx) => {
+  await showSettings(ctx);
+});
+
+// ─── /model Command ──────────────────────────────────────────────────────────
+bot.command("model", async (ctx) => {
+  const arg = ctx.match?.trim().toLowerCase();
+
+  if (arg && config.PROVIDERS[arg]) {
+    const s = getUserSettings(ctx.from.id);
+    s.provider = arg;
+    s.model = config.PROVIDERS[arg].defaultModel;
+
+    const targetName = config.PROVIDERS[arg].name;
+    const keyboard = new InlineKeyboard().text("🏠 Main Menu", "menu:main");
+    await ctx.reply(
+      `✅ Platform berhasil diubah ke *${targetName}*\nModel default: \`${s.model}\``,
+      { parse_mode: "Markdown", reply_markup: keyboard }
+    );
+    return;
+  }
+
+  await showModelPicker(ctx);
+});
+
+// ─── /ratio Command ──────────────────────────────────────────────────────────
+bot.command("ratio", async (ctx) => {
+  const arg = ctx.match?.trim();
+
+  if (arg && config.ASPECT_RATIOS.includes(arg)) {
+    const s = getUserSettings(ctx.from.id);
+    s.ratio = arg;
+    const keyboard = new InlineKeyboard().text("🏠 Main Menu", "menu:main");
+    await ctx.reply(`✅ Aspect ratio diubah ke *${arg}*`, { parse_mode: "Markdown", reply_markup: keyboard });
+    return;
+  }
+
+  await showRatioPicker(ctx);
 });
 
 // ─── /resolution Command ─────────────────────────────────────────────────────
@@ -198,29 +259,12 @@ bot.command(["resolution", "res"], async (ctx) => {
   if (arg && config.RESOLUTIONS.includes(arg)) {
     const s = getUserSettings(ctx.from.id);
     s.resolution = arg;
-    await ctx.reply(`✅ Resolusi video diubah ke *${arg}*`, { parse_mode: "Markdown" });
+    const keyboard = new InlineKeyboard().text("🏠 Main Menu", "menu:main");
+    await ctx.reply(`✅ Resolusi video diubah ke *${arg}*`, { parse_mode: "Markdown", reply_markup: keyboard });
     return;
   }
 
-  const s = getUserSettings(ctx.from.id);
-  const current = s.resolution || "720p";
-
-  const keyboard = new InlineKeyboard()
-    .text("480p (Standard/Hemat)", "set_resolution:480p")
-    .text("720p (HD/Default)", "set_resolution:720p")
-    .row()
-    .text("1080p (FHD)", "set_resolution:1080p")
-    .text("4k (UHD/Premium)", "set_resolution:4k");
-
-  await ctx.reply(
-    `🖥️ *Pilih Resolusi Video*\n\n` +
-      `Resolusi saat ini: *${current}*\n\n` +
-      `Silakan pilih kualitas resolusi:`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: keyboard,
-    }
-  );
+  await showResolutionPicker(ctx);
 });
 
 // ─── /duration Command ───────────────────────────────────────────────────────
@@ -230,34 +274,23 @@ bot.command("duration", async (ctx) => {
   if (arg && config.DURATIONS.includes(arg)) {
     const s = getUserSettings(ctx.from.id);
     s.duration = arg;
-    await ctx.reply(
-      `✅ Durasi diubah ke *${arg === "auto" ? "Auto" : arg + " detik"}*`,
-      { parse_mode: "Markdown" }
-    );
+    const label = arg === "auto" ? "Auto" : arg + " detik";
+    const keyboard = new InlineKeyboard().text("🏠 Main Menu", "menu:main");
+    await ctx.reply(`✅ Durasi diubah ke *${label}*`, { parse_mode: "Markdown", reply_markup: keyboard });
     return;
   }
 
-  const s = getUserSettings(ctx.from.id);
-  const current = s.duration === "auto" ? "Auto" : `${s.duration} detik`;
+  await showDurationPicker(ctx);
+});
 
-  const keyboard = new InlineKeyboard()
-    .text("Auto", "set_duration:auto")
-    .text("5 Detik", "set_duration:5")
-    .row()
-    .text("8 Detik", "set_duration:8")
-    .text("10 Detik", "set_duration:10")
-    .row()
-    .text("15 Detik", "set_duration:15");
+// ─── /help Command ──────────────────────────────────────────────────────────
+bot.command("help", async (ctx) => {
+  await showMainMenu(ctx);
+});
 
-  await ctx.reply(
-    `⏱ *Pilih Durasi Video*\n\n` +
-      `Durasi saat ini: *${current}*\n\n` +
-      `Pilihan preset durasi:`,
-    {
-      parse_mode: "Markdown",
-      reply_markup: keyboard,
-    }
-  );
+// ─── /menu Command ──────────────────────────────────────────────────────────
+bot.command("menu", async (ctx) => {
+  await showMainMenu(ctx);
 });
 
 // ─── /generate Command ──────────────────────────────────────────────────────
@@ -484,9 +517,8 @@ bot.callbackQuery(/^set_provider:(.+)$/, async (ctx) => {
   await ctx.editMessageText(
     `✅ *Platform berhasil diubah!*\n\n` +
       `🔌 Platform aktif: *${targetName}*\n` +
-      `🤖 Model default: \`${s.model}\`\n\n` +
-      `_Sekarang Anda siap melakukan generate video!_`,
-    { parse_mode: "Markdown" }
+      `🤖 Model default: \`${s.model}\``,
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
   );
 });
 
@@ -502,10 +534,8 @@ bot.callbackQuery(/^set_ratio:(.+)$/, async (ctx) => {
 
   await ctx.answerCallbackQuery(`Ratio diubah ke ${targetRatio}`);
   await ctx.editMessageText(
-    `✅ *Aspect Ratio berhasil diubah!*\n\n` +
-      `📐 Aspect Ratio: *${targetRatio}*\n\n` +
-      `_Pengaturan diperbarui untuk generasi video berikutnya._`,
-    { parse_mode: "Markdown" }
+    `✅ *Aspect Ratio berhasil diubah!*\n\n📐 *${targetRatio}*`,
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
   );
 });
 
@@ -521,10 +551,8 @@ bot.callbackQuery(/^set_resolution:(.+)$/, async (ctx) => {
 
   await ctx.answerCallbackQuery(`Resolusi diubah ke ${targetRes}`);
   await ctx.editMessageText(
-    `✅ *Resolusi berhasil diubah!*\n\n` +
-      `🖥️ Resolusi aktif: *${targetRes}*\n\n` +
-      `_Pengaturan diperbarui untuk generasi video berikutnya._`,
-    { parse_mode: "Markdown" }
+    `✅ *Resolusi berhasil diubah!*\n\n🖥️ *${targetRes}*`,
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
   );
 });
 
@@ -541,10 +569,8 @@ bot.callbackQuery(/^set_duration:(.+)$/, async (ctx) => {
   const durationLabel = targetDuration === "auto" ? "Auto" : `${targetDuration} detik`;
   await ctx.answerCallbackQuery(`Durasi diubah ke ${durationLabel}`);
   await ctx.editMessageText(
-    `✅ *Durasi berhasil diubah!*\n\n` +
-      `⏱️ Durasi aktif: *${durationLabel}*\n\n` +
-      `_Pengaturan diperbarui untuk generasi video berikutnya._`,
-    { parse_mode: "Markdown" }
+    `✅ *Durasi berhasil diubah!*\n\n⏱️ *${durationLabel}*`,
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
   );
 });
 
@@ -552,13 +578,7 @@ bot.callbackQuery(/^set_duration:(.+)$/, async (ctx) => {
 bot.on("message:text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return;
 
-  await ctx.reply(
-    `💡 Untuk generate video, gunakan:\n\n` +
-      `\`/generate <prompt anda>\`\n\n` +
-      `Atau kirim *foto dengan caption* untuk Image-to-Video.\n\n` +
-      `Ketik /help untuk panduan lengkap.`,
-    { parse_mode: "Markdown" }
-  );
+  await showMainMenu(ctx, `💡 Maaf, saya tidak mengerti "${ctx.message.text.substring(0, 30)}"\n\nGunakan menu di bawah:`);
 });
 
 // ─── Error Handler ───────────────────────────────────────────────────────────
