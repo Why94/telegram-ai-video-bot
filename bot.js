@@ -46,6 +46,7 @@ const PROVIDER_EMOJIS = {
   runway: "🟠",
   veo: "🟤",
   leonardo: "⚪",
+  ernie: "🔴",
 };
 
 async function showMainMenu(ctx, text = null) {
@@ -88,13 +89,14 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
       const genS = getUserSettings(ctx.from.id);
       const genP = config.PROVIDERS[genS.provider];
       const genEmoji = PROVIDER_EMOJIS[genS.provider] || "🤖";
+      const genIsImg = genS.provider === "ernie";
       await ctx.reply(
         `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
         `┃   🎬 *GENERATE*     ┃\n` +
         `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
         `${genEmoji} *${genP.name}* aktif\n` +
         `📐 \`${genS.ratio}\` 🖥️ \`${genS.resolution || "720p"}\` ⏱ \`${genS.duration === "auto" ? "Auto" : genS.duration + "s"}\`\n\n` +
-        `📝 *Ketik prompt:*\n\n` +
+        `📝 *Ketik prompt untuk ${genIsImg ? "gambar" : "video"}:*\n\n` +
         `Contoh:\n` +
         `\`/generate A golden retriever running on the beach, cinematic\``,
         { parse_mode: "Markdown" }
@@ -127,7 +129,7 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
         `Kirim foto dengan caption/prompt\n\n` +
         `⚙️ *Pengaturan:*\n` +
         `Gunakan menu untuk ganti model, ratio, resolusi, durasi\n\n` +
-        `🤖 *Platform:* BytePlus, Kling, Hailuo, Luma, Runway, Veo, Leonardo`,
+        `🤖 *Platform:* BytePlus, Kling, Hailuo, Luma, Runway, Veo, Leonardo, ERNIE`,
         { parse_mode: "Markdown" }
       );
       break;
@@ -185,6 +187,7 @@ async function showModelPicker(ctx) {
     .text(providerBtn("veo").text, providerBtn("veo").data)
     .row()
     .text(providerBtn("leonardo").text, providerBtn("leonardo").data)
+    .text(providerBtn("ernie").text, providerBtn("ernie").data)
     .row()
     .text("🏠 Main Menu", "menu:main");
 
@@ -391,6 +394,7 @@ bot.command("generate", async (ctx) => {
     const s = getUserSettings(ctx.from.id);
     const p = config.PROVIDERS[s.provider];
     const emoji = PROVIDER_EMOJIS[s.provider] || "🤖";
+    const isImgProvider = s.provider === "ernie";
     const keyboard = new InlineKeyboard()
       .text("✍️ Ketik Prompt", "menu:generate")
       .text("🏠 Main Menu", "menu:main");
@@ -400,7 +404,7 @@ bot.command("generate", async (ctx) => {
       `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
       `${emoji} *${p.name}* aktif\n` +
       `📐 \`${s.ratio}\` 🖥️ \`${s.resolution || "720p"}\` ⏱ \`${s.duration === "auto" ? "Auto" : s.duration + "s"}\`\n\n` +
-      `📝 *Tulis prompt untuk video:*\n\n` +
+      `📝 *Tulis prompt untuk ${isImgProvider ? "gambar" : "video"}:*\n\n` +
       `Contoh:\n` +
       `\`/generate Cinematic drone shot of a tropical island at sunset, 4K, slow motion\``,
       { parse_mode: "Markdown", reply_markup: keyboard }
@@ -457,10 +461,12 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   const providerInfo = config.PROVIDERS[providerKey];
 
   // Send initial status
-  const modeText = imageBase64 ? "🖼 Image-to-Video" : "✍️ Text-to-Video";
+  const isImageProvider = providerKey === "ernie";
+  const modeText = isImageProvider ? "✍️ Text-to-Image" : (imageBase64 ? "🖼 Image-to-Video" : "✍️ Text-to-Video");
+  const genLabel = isImageProvider ? "Gambar" : "Video";
   let statusMsg = existingStatusMsg;
 
-  const startingText = `⏳ *Memulai Generate Video...*\n\n` +
+  const startingText = `⏳ *Memulai Generate ${genLabel}...*\n\n` +
     `🔌 Platform: *${providerInfo.name}*\n` +
     `🤖 Model: \`${s.model}\`\n` +
     `📝 Prompt: _${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}_\n\n` +
@@ -543,7 +549,7 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
       await ctx.api.editMessageText(
         ctx.chat.id,
         statusMsg.message_id,
-        `🎬 *Generating Video...* ${dots}\n\n` +
+        `${isImageProvider ? "🖼 *Generating Image...*" : "🎬 *Generating Video...*"} ${dots}\n\n` +
           `🔌 Platform: *${providerInfo.name}*\n` +
           `🤖 Model: \`${s.model}\`\n` +
           `🆔 Task: \`${taskId.slice(0, 12)}...\`\n` +
@@ -559,32 +565,52 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
 
   // Handle result
   if (result.success) {
+    const isImage = providerKey === "ernie";
+    const mediaLabel = isImage ? "Gambar" : "Video";
+
     await ctx.api.editMessageText(
       ctx.chat.id,
       statusMsg.message_id,
-      `✅ *Video Berhasil Di-generate!*\n\n` +
+      `✅ *${mediaLabel} Berhasil Di-generate!*\n\n` +
         `🔌 Platform: *${providerInfo.name}*\n` +
         `🆔 Task ID: \`${taskId}\`\n\n` +
-        `📥 Mengirim video ke chat...`,
+        `📥 Mengirim ${mediaLabel.toLowerCase()} ke chat...`,
       { parse_mode: "Markdown" }
     );
 
     const caption =
-      `🎬 *AI Generated Video*\n\n` +
-      `🔌 Platform: *${providerInfo.name}*\n` +
-      `📝 _${prompt.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`;
+      isImage
+        ? `🖼 *AI Generated Image*\n\n` +
+          `🔌 Platform: *${providerInfo.name}*\n` +
+          `📝 _${prompt.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`
+        : `🎬 *AI Generated Video*\n\n` +
+          `🔌 Platform: *${providerInfo.name}*\n` +
+          `📝 _${prompt.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`;
 
-    await helpers.sendVideoFromUrl(ctx, result.videoUrl, caption);
+    if (isImage) {
+      const buffer = Buffer.from(result.videoUrl.split(",")[1], "base64");
+      await ctx.replyWithPhoto(buffer, { caption, parse_mode: "Markdown" });
+    } else {
+      await helpers.sendVideoFromUrl(ctx, result.videoUrl, caption);
+    }
 
     // Final status update
-    await ctx.api.editMessageText(
-      ctx.chat.id,
-      statusMsg.message_id,
-      `✅ *Selesai!*\n\n` +
+    const finalMsg = isImage
+      ? `✅ *Selesai!*\n\n` +
         `🔌 Platform: *${providerInfo.name}*\n` +
         `🆔 Task ID: \`${taskId}\`\n` +
         `📝 Prompt: _${prompt.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
-        `✨ Video telah terkirim!`,
+        `🖼️ Gambar telah terkirim!`
+      : `✅ *Selesai!*\n\n` +
+        `🔌 Platform: *${providerInfo.name}*\n` +
+        `🆔 Task ID: \`${taskId}\`\n` +
+        `📝 Prompt: _${prompt.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
+        `✨ Video telah terkirim!`;
+
+    await ctx.api.editMessageText(
+      ctx.chat.id,
+      statusMsg.message_id,
+      finalMsg,
       { parse_mode: "Markdown" }
     );
   } else {
