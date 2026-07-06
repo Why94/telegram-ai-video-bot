@@ -707,9 +707,22 @@ bot.catch((err) => {
 });
 
 // ─── Start Bot ───────────────────────────────────────────────────────────────
+async function setupBot() {
+  await bot.api.setMyCommands([
+    { command: "start", description: "🚀 Main Menu" },
+    { command: "generate", description: "🎬 Generate video dari prompt" },
+    { command: "model", description: "🤖 Ganti platform AI" },
+    { command: "ratio", description: "📐 Set aspect ratio" },
+    { command: "resolution", description: "🖥️ Set resolusi video" },
+    { command: "duration", description: "⏱ Set durasi video" },
+    { command: "settings", description: "⚙️ Lihat pengaturan" },
+    { command: "help", description: "❓ Bantuan" },
+  ]);
+}
+
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 console.log("🎬 AI Video Generator Bot (Multi-Model)");
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 console.log("🚀 Starting bot...\n");
 
-bot.start();
+setupBot().then(() => bot.start()).catch(() => bot.start());
