@@ -35,7 +35,8 @@ bot.command("start", async (ctx) => {
       `• *Hailuo / MiniMax* (v2 / v1)\n` +
       `• *Luma Dream Machine* (Ray-2)\n` +
       `• *Runway* (Gen-4.5 / Gen-3)\n` +
-      `• *Google Veo 2*\n\n` +
+      `• *Google Veo 2*\n` +
+      `• *Leonardo AI* (Motion 2.0 / Motion 2.0 Fast)\n\n` +
       `🎯 *Cara penggunaan:*\n\n` +
       `1️⃣ *Text-to-Video:*\n` +
       `   Ketik /generate diikuti prompt Anda\n` +
@@ -78,7 +79,8 @@ bot.command("help", async (ctx) => {
       `• \`/model hailuo\` — Switch ke Hailuo / MiniMax\n` +
       `• \`/model luma\` — Switch ke Luma Dream Machine\n` +
       `• \`/model runway\` — Switch ke Runway\n` +
-      `• \`/model veo\` — Switch ke Google Veo 2\n\n` +
+      `• \`/model veo\` — Switch ke Google Veo 2\n` +
+      `• \`/model leonardo\` — Switch ke Leonardo AI\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `⚙️ *PENGATURAN PARAMETER*\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
@@ -140,7 +142,9 @@ bot.command("model", async (ctx) => {
     .text("Luma Dream Machine", "set_provider:luma")
     .row()
     .text("Runway", "set_provider:runway")
-    .text("Google Veo 2", "set_provider:veo");
+    .text("Google Veo 2", "set_provider:veo")
+    .row()
+    .text("Leonardo AI", "set_provider:leonardo");
 
   await ctx.reply(
     `🤖 *Pilih Platform Generator Video AI*\n\n` +
@@ -305,6 +309,12 @@ bot.on("message:photo", async (ctx) => {
   }
 });
 
+// ─── Helper: Progress Bar ───────────────────────────────────────────────────
+function getProgressBar(percent, length = 10) {
+  const filled = Math.round((percent / 100) * length);
+  return "█".repeat(filled) + "░".repeat(length - filled);
+}
+
 // ─── Core Video Generation Handler ──────────────────────────────────────────
 async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingStatusMsg = null) {
   const userId = ctx.from.id;
@@ -366,27 +376,46 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
 
   // Poll for completion with status updates
   let lastEditedStatus = "queued";
+  let progressDots = 0;
 
-  const result = await providers.waitForCompletion(providerKey, taskId, async (status) => {
-    if (status === lastEditedStatus) return;
-    lastEditedStatus = status;
+  const result = await providers.waitForCompletion(providerKey, taskId, async (status, resultData, elapsed) => {
+    const statusChanged = status !== lastEditedStatus;
+    if (statusChanged) {
+      lastEditedStatus = status;
+    }
 
     const statusEmoji = {
-      queued: "⏳ Queued — Menunggu giliran...",
-      running: "🔄 Running — AI sedang membuat video...",
+      queued: "⏳ *Queued*",
+      running: "🔄 *Running*",
     };
 
     const statusText = statusEmoji[status] || `❓ Status: ${status}`;
+    const elapsedSec = Math.floor(elapsed / 1000);
+    const elapsedMin = Math.floor(elapsedSec / 60);
+    const elapsedStr = elapsedMin > 0 ? `${elapsedMin}m ${elapsedSec % 60}s` : `${elapsedSec}s`;
+
+    progressDots = (progressDots + 1) % 20;
+    const dots = ".".repeat(Math.min(progressDots + 1, 5)).padEnd(5, " ");
+
+    let progressLine = "";
+    if (resultData?.progress !== undefined && resultData.progress !== null) {
+      progressLine = `\n📊 Progress: *${resultData.progress}%* ${getProgressBar(resultData.progress, 10)}`;
+    }
+    if (resultData?.previewUrl && status === "running") {
+      progressLine += `\n🖼️ *Preview tersedia*`;
+    }
 
     try {
       await ctx.api.editMessageText(
         ctx.chat.id,
         statusMsg.message_id,
-        `🎬 *Generating Video...*\n\n` +
+        `🎬 *Generating Video...* ${dots}\n\n` +
           `🔌 Platform: *${providerInfo.name}*\n` +
-          `🆔 Task ID: \`${taskId}\`\n\n` +
-          `${statusText}\n\n` +
-          `_Mohon tunggu, proses ini memakan waktu 1-5 menit..._`,
+          `🤖 Model: \`${s.model}\`\n` +
+          `🆔 Task: \`${taskId.slice(0, 12)}...\`\n` +
+          `⏱️ *${elapsedStr}* ${progressLine}\n\n` +
+          `${statusText} — ${status === "queued" ? "Menunggu giliran" : "AI sedang memproses video"}...\n` +
+          `_Mohon tunggu..._`,
         { parse_mode: "Markdown" }
       );
     } catch {
