@@ -14,6 +14,7 @@ function getUserSettings(userId) {
       ratio: config.defaultAspectRatio,
       duration: config.defaultDuration,
       resolution: config.defaultResolution,
+      motion: config.defaultMotion,
       generateAudio: config.generateAudio,
     });
   }
@@ -30,10 +31,12 @@ function mainMenuKeyboard() {
     .text("⚙️ Settings", "menu:settings")
     .row()
     .text("🤖 Model", "menu:model")
+    .text("🎬 Motion", "menu:motion")
+    .row()
     .text("📐 Ratio", "menu:ratio")
+    .text("⏱ Duration", "menu:duration")
     .row()
     .text("🖥️ Resolution", "menu:resolution")
-    .text("⏱ Duration", "menu:duration")
     .row()
     .text("❓ Help", "menu:help");
 }
@@ -47,6 +50,7 @@ const PROVIDER_EMOJIS = {
   veo: "🟤",
   leonardo: "⚪",
   ernie: "🔴",
+  replicate: "🟡",
 };
 
 async function showMainMenu(ctx, text = null) {
@@ -63,7 +67,8 @@ async function showMainMenu(ctx, text = null) {
     `👋 Halo *${name}*!\n\n` +
     `📡 *Status Aktif:*\n` +
     `${emoji} Platform: *${providerInfo.name}*\n` +
-    `📐 Ratio: \`${s.ratio}\`  🖥️ Res: \`${s.resolution || "720p"}\`\n\n` +
+    `📐 Ratio: \`${s.ratio}\`  🖥️ Res: \`${s.resolution || "720p"}\`\n` +
+    `🎬 Motion: *${s.motion === "none" ? "❌ Off" : s.motion}*\n\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
     `👇 *Pilih menu:*`
   );
@@ -95,7 +100,7 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
         `┃   🎬 *GENERATE*     ┃\n` +
         `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
         `${genEmoji} *${genP.name}* aktif\n` +
-        `📐 \`${genS.ratio}\` 🖥️ \`${genS.resolution || "720p"}\` ⏱ \`${genS.duration === "auto" ? "Auto" : genS.duration + "s"}\`\n\n` +
+        `📐 \`${genS.ratio}\` 🖥️ \`${genS.resolution || "720p"}\` ⏱ \`${genS.duration === "auto" ? "Auto" : genS.duration + "s"}\` 🎬 *${genS.motion === "none" ? "❌" : genS.motion}*\n\n` +
         `📝 *Ketik prompt untuk ${genIsImg ? "gambar" : "video"}:*\n\n` +
         `Contoh:\n` +
         `\`/generate A golden retriever running on the beach, cinematic\``,
@@ -120,6 +125,9 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
     case "main":
       await showMainMenu(ctx);
       return;
+    case "motion":
+      await showMotionPicker(ctx);
+      break;
     case "help":
       await ctx.reply(
         `📖 *Panduan Lengkap*\n\n` +
@@ -128,8 +136,9 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
         `🖼 *Image-to-Video:*\n` +
         `Kirim foto dengan caption/prompt\n\n` +
         `⚙️ *Pengaturan:*\n` +
-        `Gunakan menu untuk ganti model, ratio, resolusi, durasi\n\n` +
-        `🤖 *Platform:* BytePlus, Kling, Hailuo, Luma, Runway, Veo, Leonardo, ERNIE`,
+        `Gunakan menu untuk ganti model, ratio, resolusi, durasi, motion\n\n` +
+        `🎬 *Motion Control:* pan, zoom, tilt, orbit\n\n` +
+        `🤖 *Platform:* BytePlus, Kling, Hailuo, Luma, Runway, Veo, Leonardo, ERNIE, Replicate`,
         { parse_mode: "Markdown" }
       );
       break;
@@ -144,10 +153,12 @@ async function showSettings(ctx) {
 
   const keyboard = new InlineKeyboard()
     .text("🤖 Ganti Model", "menu:model")
+    .text("🎬 Motion", "menu:motion")
+    .row()
     .text("📐 Ganti Ratio", "menu:ratio")
+    .text("⏱ Ganti Durasi", "menu:duration")
     .row()
     .text("🖥️ Ganti Resolusi", "menu:resolution")
-    .text("⏱ Ganti Durasi", "menu:duration")
     .row()
     .text("🏠 Main Menu", "menu:main");
 
@@ -160,6 +171,7 @@ async function showSettings(ctx) {
     `├ 📐 *Ratio:* \`${s.ratio}\`\n` +
     `├ 🖥️ *Res:* \`${s.resolution || "720p"}\`\n` +
     `├ ⏱ *Durasi:* \`${s.duration === "auto" ? "Auto" : s.duration + " detik"}\`\n` +
+    `├ 🎬 *Motion:* ${s.motion === "none" ? "❌ Off" : `\`${s.motion}\``}\n` +
     `└ 🔊 *Audio:* ${s.generateAudio ? "✅ Nyala" : "❌ Mati"}\n`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
@@ -188,6 +200,8 @@ async function showModelPicker(ctx) {
     .row()
     .text(providerBtn("leonardo").text, providerBtn("leonardo").data)
     .text(providerBtn("ernie").text, providerBtn("ernie").data)
+    .row()
+    .text(providerBtn("replicate").text, providerBtn("replicate").data)
     .row()
     .text("🏠 Main Menu", "menu:main");
 
@@ -300,6 +314,26 @@ async function showDurationPicker(ctx) {
   );
 }
 
+async function showMotionPicker(ctx) {
+  const s = getUserSettings(ctx.from.id);
+  const current = s.motion;
+
+  const keyboard = new InlineKeyboard();
+  for (const m of config.MOTION_OPTIONS) {
+    const label = m === "none" ? "❌ None" : `🎬 ${m}`;
+    keyboard.text(m === current ? `✅ ${label}` : label, `set_motion:${m}`);
+    keyboard.row();
+  }
+  keyboard.text("🏠 Main Menu", "menu:main");
+
+  await ctx.reply(
+    `🎬 *AI Motion Control*\n\n` +
+    `Saat ini: ${current === "none" ? "❌ Off" : `\`${current}\``}\n\n` +
+    `👇 Pilih gerakan kamera:`,
+    { parse_mode: "Markdown", reply_markup: keyboard }
+  );
+}
+
 // ─── /settings Command ──────────────────────────────────────────────────────
 bot.command("settings", async (ctx) => {
   await showSettings(ctx);
@@ -360,6 +394,22 @@ bot.command(["resolution", "res"], async (ctx) => {
   await showResolutionPicker(ctx);
 });
 
+// ─── /motion Command ────────────────────────────────────────────────────────
+bot.command("motion", async (ctx) => {
+  const arg = ctx.match?.trim().toLowerCase();
+
+  if (arg && config.MOTION_OPTIONS.includes(arg)) {
+    const s = getUserSettings(ctx.from.id);
+    s.motion = arg;
+    const label = arg === "none" ? "❌ Off" : `🎬 ${arg}`;
+    const keyboard = new InlineKeyboard().text("🏠 Main Menu", "menu:main");
+    await ctx.reply(`✅ Motion diubah ke *${label}*`, { parse_mode: "Markdown", reply_markup: keyboard });
+    return;
+  }
+
+  await showMotionPicker(ctx);
+});
+
 // ─── /duration Command ───────────────────────────────────────────────────────
 bot.command("duration", async (ctx) => {
   const arg = ctx.match?.trim().toLowerCase();
@@ -402,11 +452,11 @@ bot.command("generate", async (ctx) => {
       `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
       `┃   🎬 *GENERATE*     ┃\n` +
       `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-      `${emoji} *${p.name}* aktif\n` +
-      `📐 \`${s.ratio}\` 🖥️ \`${s.resolution || "720p"}\` ⏱ \`${s.duration === "auto" ? "Auto" : s.duration + "s"}\`\n\n` +
-      `📝 *Tulis prompt untuk ${isImgProvider ? "gambar" : "video"}:*\n\n` +
-      `Contoh:\n` +
-      `\`/generate Cinematic drone shot of a tropical island at sunset, 4K, slow motion\``,
+    `${emoji} *${p.name}* aktif\n` +
+    `📐 \`${s.ratio}\` 🖥️ \`${s.resolution || "720p"}\` ⏱ \`${s.duration === "auto" ? "Auto" : s.duration + "s"}\` 🎬 *${s.motion === "none" ? "❌" : s.motion}*\n\n` +
+    `📝 *Tulis prompt untuk ${isImgProvider ? "gambar" : "video"}:*\n\n` +
+    `Contoh:\n` +
+    `\`/generate Cinematic drone shot of a tropical island at sunset, 4K, slow motion\``,
       { parse_mode: "Markdown", reply_markup: keyboard }
     );
     return;
@@ -484,6 +534,7 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
     ratio: s.ratio,
     resolution: s.resolution || "720p",
     duration: s.duration,
+    motion: s.motion,
     generateAudio: s.generateAudio,
   });
 
@@ -717,6 +768,24 @@ bot.callbackQuery(/^set_duration:(.+)$/, async (ctx) => {
   );
 });
 
+bot.callbackQuery(/^set_motion:(.+)$/, async (ctx) => {
+  const targetMotion = ctx.match[1];
+  if (!config.MOTION_OPTIONS.includes(targetMotion)) {
+    await ctx.answerCallbackQuery("Motion tidak valid.");
+    return;
+  }
+
+  const s = getUserSettings(ctx.from.id);
+  s.motion = targetMotion;
+
+  const label = targetMotion === "none" ? "❌ Off" : `🎬 ${targetMotion}`;
+  await ctx.answerCallbackQuery(`Motion: ${label}`);
+  await ctx.editMessageText(
+    `✅ *Motion Diubah*\n\n🎬 \`${label}\``,
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
+  );
+});
+
 // ─── Fallback: Unknown text messages ─────────────────────────────────────────
 bot.on("message:text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return;
@@ -739,6 +808,7 @@ async function setupBot() {
     { command: "generate", description: "🎬 Generate video dari prompt" },
     { command: "model", description: "🤖 Ganti platform AI" },
     { command: "ratio", description: "📐 Set aspect ratio" },
+    { command: "motion", description: "🎬 Set gerakan kamera (AI Motion Control)" },
     { command: "resolution", description: "🖥️ Set resolusi video" },
     { command: "duration", description: "⏱ Set durasi video" },
     { command: "settings", description: "⚙️ Lihat pengaturan" },
