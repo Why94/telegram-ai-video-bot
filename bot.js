@@ -26,7 +26,7 @@ const bot = new Bot(config.telegramToken);
 // ─── Main Menu ───────────────────────────────────────────────────────────────
 function mainMenuKeyboard() {
   return new InlineKeyboard()
-    .text("🎬 Generate Video", "menu:generate")
+    .text("🎬 Generate", "menu:generate")
     .text("⚙️ Settings", "menu:settings")
     .row()
     .text("🤖 Model", "menu:model")
@@ -38,17 +38,33 @@ function mainMenuKeyboard() {
     .text("❓ Help", "menu:help");
 }
 
+const PROVIDER_EMOJIS = {
+  byteplus: "🔷",
+  kling: "🟣",
+  hailuo: "🟢",
+  luma: "🔵",
+  runway: "🟠",
+  veo: "🟤",
+  leonardo: "⚪",
+};
+
 async function showMainMenu(ctx, text = null) {
   const name = ctx.from?.first_name || "User";
   const s = getUserSettings(ctx.from.id);
   const providerInfo = config.PROVIDERS[s.provider];
+  const emoji = PROVIDER_EMOJIS[s.provider] || "🤖";
 
   const msg = text || (
-    `🎬 *AI Video Generator Bot*\n\n` +
-    `Halo *${name}*! 👋\n\n` +
-    `🔌 *Platform aktif:* ${providerInfo.name}\n` +
-    `📐 *Ratio:* ${s.ratio} | 🖥️ *Res:* ${s.resolution || "720p"}\n\n` +
-    `👇 Pilih menu di bawah:`
+    `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
+    `┃   🎬 *AI VIDEO GEN*   ┃\n` +
+    `┃   *BOT* 🚀            ┃\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+    `👋 Halo *${name}*!\n\n` +
+    `📡 *Status Aktif:*\n` +
+    `${emoji} Platform: *${providerInfo.name}*\n` +
+    `📐 Ratio: \`${s.ratio}\`  🖥️ Res: \`${s.resolution || "720p"}\`\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `👇 *Pilih menu:*`
   );
 
   await ctx.reply(msg, {
@@ -69,10 +85,18 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
 
   switch (action) {
     case "generate":
+      const genS = getUserSettings(ctx.from.id);
+      const genP = config.PROVIDERS[genS.provider];
+      const genEmoji = PROVIDER_EMOJIS[genS.provider] || "🤖";
       await ctx.reply(
-        `🎬 *Generate Video*\n\nKetik prompt kamu di bawah:\n\n` +
+        `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
+        `┃   🎬 *GENERATE*     ┃\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+        `${genEmoji} *${genP.name}* aktif\n` +
+        `📐 \`${genS.ratio}\` 🖥️ \`${genS.resolution || "720p"}\` ⏱ \`${genS.duration === "auto" ? "Auto" : genS.duration + "s"}\`\n\n` +
+        `📝 *Ketik prompt:*\n\n` +
         `Contoh:\n` +
-        `\`/generate A golden retriever running on the beach at sunset\``,
+        `\`/generate A golden retriever running on the beach, cinematic\``,
         { parse_mode: "Markdown" }
       );
       break;
@@ -114,61 +138,111 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
 async function showSettings(ctx) {
   const s = getUserSettings(ctx.from.id);
   const providerInfo = config.PROVIDERS[s.provider];
+  const emoji = PROVIDER_EMOJIS[s.provider] || "🤖";
 
-  const keyboard = new InlineKeyboard().text("🏠 Main Menu", "menu:main");
+  const keyboard = new InlineKeyboard()
+    .text("🤖 Ganti Model", "menu:model")
+    .text("📐 Ganti Ratio", "menu:ratio")
+    .row()
+    .text("🖥️ Ganti Resolusi", "menu:resolution")
+    .text("⏱ Ganti Durasi", "menu:duration")
+    .row()
+    .text("🏠 Main Menu", "menu:main");
+
   await ctx.reply(
-    `⚙️ *Pengaturan Saat Ini*\n\n` +
-      `🔌 Platform: *${providerInfo.name}*\n` +
-      `🤖 Model ID: \`${s.model}\`\n` +
-      `📐 Aspect Ratio: *${s.ratio}*\n` +
-      `🖥️ Resolusi: *${s.resolution || "720p"}*\n` +
-      `⏱ Durasi: *${s.duration === "auto" ? "Auto" : s.duration + " detik"}*\n` +
-      `🔊 Audio: *${s.generateAudio ? "Ya" : "Tidak"}*\n`,
+    `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
+    `┃   ⚙️ *SETTINGS*     ┃\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+    `${emoji} *Platform:* ${providerInfo.name}\n` +
+    `├ 🤖 *Model:* \`${s.model}\`\n` +
+    `├ 📐 *Ratio:* \`${s.ratio}\`\n` +
+    `├ 🖥️ *Res:* \`${s.resolution || "720p"}\`\n` +
+    `├ ⏱ *Durasi:* \`${s.duration === "auto" ? "Auto" : s.duration + " detik"}\`\n` +
+    `└ 🔊 *Audio:* ${s.generateAudio ? "✅ Nyala" : "❌ Mati"}\n`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 }
 
 async function showModelPicker(ctx) {
   const s = getUserSettings(ctx.from.id);
-  const activeProviderName = config.PROVIDERS[s.provider].name;
+  const activeKey = s.provider;
+
+  function providerBtn(key) {
+    const p = config.PROVIDERS[key];
+    const emoji = PROVIDER_EMOJIS[key] || "🤖";
+    const label = activeKey === key ? `${emoji} ✅ ${p.name}` : `${emoji} ${p.name}`;
+    return { text: label, data: `set_provider:${key}` };
+  }
 
   const keyboard = new InlineKeyboard()
-    .text("BytePlus Seedance", "set_provider:byteplus")
-    .text("Kling AI", "set_provider:kling")
+    .text(providerBtn("byteplus").text, providerBtn("byteplus").data)
+    .text(providerBtn("runway").text, providerBtn("runway").data)
     .row()
-    .text("Hailuo / MiniMax", "set_provider:hailuo")
-    .text("Luma Dream Machine", "set_provider:luma")
+    .text(providerBtn("kling").text, providerBtn("kling").data)
+    .text(providerBtn("hailuo").text, providerBtn("hailuo").data)
     .row()
-    .text("Runway", "set_provider:runway")
-    .text("Google Veo 2", "set_provider:veo")
+    .text(providerBtn("luma").text, providerBtn("luma").data)
+    .text(providerBtn("veo").text, providerBtn("veo").data)
     .row()
-    .text("Leonardo AI", "set_provider:leonardo")
+    .text(providerBtn("leonardo").text, providerBtn("leonardo").data)
     .row()
     .text("🏠 Main Menu", "menu:main");
 
   await ctx.reply(
-    `🤖 *Pilih Platform Generator Video AI*\n\n` +
-      `Platform aktif saat ini: *${activeProviderName}*`,
+    `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
+    `┃   🤖 *PILIH MODEL*   ┃\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+    `📌 *Aktif:* ${PROVIDER_EMOJIS[activeKey] || ""} *${config.PROVIDERS[activeKey].name}*\n\n` +
+    `👇 Klik untuk berganti provider:`,
+    { parse_mode: "Markdown", reply_markup: keyboard }
+  );
+}
+
+async function showModelDetail(ctx, providerKey) {
+  const p = config.PROVIDERS[providerKey];
+  const emoji = PROVIDER_EMOJIS[providerKey] || "🤖";
+  const s = getUserSettings(ctx.from.id);
+  const activeModel = s.model;
+  const models = Object.values(p.models);
+
+  const keyboard = new InlineKeyboard();
+  for (const model of models) {
+    const isActive = model === activeModel;
+    keyboard.text(isActive ? `✅ ${model}` : model, `set_model:${providerKey}:${model}`);
+    keyboard.row();
+  }
+  keyboard.text("🔙 Back", "menu:model").text("🏠 Main Menu", "menu:main");
+
+  await ctx.reply(
+    `${emoji} *${p.name}*\n\n` +
+    `📋 *Pilih Model:*\n` +
+    models.map(m => (m === activeModel ? `✅ \`${m}\` *(active)*` : `• \`${m}\``)).join("\n") +
+    `\n\n👇 Klik untuk memilih model:`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 }
 
 async function showRatioPicker(ctx) {
   const s = getUserSettings(ctx.from.id);
+  function ratioBtn(r) {
+    return { text: r === s.ratio ? `✅ ${r}` : r, data: `set_ratio:${r}` };
+  }
   const keyboard = new InlineKeyboard()
-    .text("16:9 (Landscape)", "set_ratio:16:9")
-    .text("9:16 (Shorts/Portrait)", "set_ratio:9:16")
+    .text(ratioBtn("16:9").text, ratioBtn("16:9").data)
+    .text(ratioBtn("9:16").text, ratioBtn("9:16").data)
     .row()
-    .text("1:1 (Square)", "set_ratio:1:1")
-    .text("21:9 (Cinematic)", "set_ratio:21:9")
+    .text(ratioBtn("1:1").text, ratioBtn("1:1").data)
+    .text(ratioBtn("21:9").text, ratioBtn("21:9").data)
     .row()
-    .text("4:3 (Classic TV)", "set_ratio:4:3")
-    .text("3:4 (Vertical Feed)", "set_ratio:3:4")
+    .text(ratioBtn("4:3").text, ratioBtn("4:3").data)
+    .text(ratioBtn("3:4").text, ratioBtn("3:4").data)
     .row()
     .text("🏠 Main Menu", "menu:main");
 
   await ctx.reply(
-    `📐 *Pilih Aspect Ratio*\nRatio saat ini: *${s.ratio}*`,
+    `📐 *Pengaturan Aspect Ratio*\n\n` +
+    `Saat ini: \`${s.ratio}\`\n\n` +
+    `👇 Pilih ratio:`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 }
@@ -176,37 +250,49 @@ async function showRatioPicker(ctx) {
 async function showResolutionPicker(ctx) {
   const s = getUserSettings(ctx.from.id);
   const current = s.resolution || "720p";
+  function resBtn(r) {
+    const label = { "480p": "480p (Standard)", "720p": "720p (HD)", "1080p": "1080p (FHD)", "4k": "4k (UHD)" }[r] || r;
+    return { text: r === current ? `✅ ${label}` : label, data: `set_resolution:${r}` };
+  }
   const keyboard = new InlineKeyboard()
-    .text("480p (Standard)", "set_resolution:480p")
-    .text("720p (HD/Default)", "set_resolution:720p")
+    .text(resBtn("480p").text, resBtn("480p").data)
+    .text(resBtn("720p").text, resBtn("720p").data)
     .row()
-    .text("1080p (FHD)", "set_resolution:1080p")
-    .text("4k (UHD/Premium)", "set_resolution:4k")
+    .text(resBtn("1080p").text, resBtn("1080p").data)
+    .text(resBtn("4k").text, resBtn("4k").data)
     .row()
     .text("🏠 Main Menu", "menu:main");
 
   await ctx.reply(
-    `🖥️ *Pilih Resolusi*\nResolusi saat ini: *${current}*`,
+    `🖥️ *Pengaturan Resolusi*\n\n` +
+    `Saat ini: \`${current}\`\n\n` +
+    `👇 Pilih resolusi:`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 }
 
 async function showDurationPicker(ctx) {
   const s = getUserSettings(ctx.from.id);
-  const current = s.duration === "auto" ? "Auto" : `${s.duration} detik`;
+  const current = s.duration;
+  function durBtn(d) {
+    const label = d === "auto" ? "⏩ Auto" : `${d} Detik`;
+    return { text: d === current ? `✅ ${label}` : label, data: `set_duration:${d}` };
+  }
   const keyboard = new InlineKeyboard()
-    .text("Auto", "set_duration:auto")
-    .text("5 Detik", "set_duration:5")
+    .text(durBtn("auto").text, durBtn("auto").data)
+    .text(durBtn("5").text, durBtn("5").data)
     .row()
-    .text("8 Detik", "set_duration:8")
-    .text("10 Detik", "set_duration:10")
+    .text(durBtn("8").text, durBtn("8").data)
+    .text(durBtn("10").text, durBtn("10").data)
     .row()
-    .text("15 Detik", "set_duration:15")
+    .text(durBtn("15").text, durBtn("15").data)
     .row()
     .text("🏠 Main Menu", "menu:main");
 
   await ctx.reply(
-    `⏱ *Pilih Durasi*\nDurasi saat ini: *${current}*`,
+    `⏱ *Pengaturan Durasi*\n\n` +
+    `Saat ini: \`${current === "auto" ? "Auto" : current + " detik"}\`\n\n` +
+    `👇 Pilih durasi:`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 }
@@ -225,11 +311,15 @@ bot.command("model", async (ctx) => {
     s.provider = arg;
     s.model = config.PROVIDERS[arg].defaultModel;
 
-    const targetName = config.PROVIDERS[arg].name;
-    const keyboard = new InlineKeyboard().text("🏠 Main Menu", "menu:main");
+    const p = config.PROVIDERS[arg];
+    const emoji = PROVIDER_EMOJIS[arg] || "🤖";
     await ctx.reply(
-      `✅ Platform berhasil diubah ke *${targetName}*\nModel default: \`${s.model}\``,
-      { parse_mode: "Markdown", reply_markup: keyboard }
+      `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
+      `┃   ✅ *BERHASIL*     ┃\n` +
+      `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+      `${emoji} *${p.name}*\n` +
+      `🤖 \`${s.model}\``,
+      { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
     );
     return;
   }
@@ -298,11 +388,22 @@ bot.command("generate", async (ctx) => {
   const prompt = ctx.match?.trim();
 
   if (!prompt) {
+    const s = getUserSettings(ctx.from.id);
+    const p = config.PROVIDERS[s.provider];
+    const emoji = PROVIDER_EMOJIS[s.provider] || "🤖";
+    const keyboard = new InlineKeyboard()
+      .text("✍️ Ketik Prompt", "menu:generate")
+      .text("🏠 Main Menu", "menu:main");
     await ctx.reply(
-      `❗ *Prompt diperlukan!*\n\n` +
-        `Contoh:\n` +
-        `\`/generate A golden retriever running on the beach at sunset, cinematic slow motion\``,
-      { parse_mode: "Markdown" }
+      `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
+      `┃   🎬 *GENERATE*     ┃\n` +
+      `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+      `${emoji} *${p.name}* aktif\n` +
+      `📐 \`${s.ratio}\` 🖥️ \`${s.resolution || "720p"}\` ⏱ \`${s.duration === "auto" ? "Auto" : s.duration + "s"}\`\n\n` +
+      `📝 *Tulis prompt untuk video:*\n\n` +
+      `Contoh:\n` +
+      `\`/generate Cinematic drone shot of a tropical island at sunset, 4K, slow motion\``,
+      { parse_mode: "Markdown", reply_markup: keyboard }
     );
     return;
   }
@@ -513,11 +614,27 @@ bot.callbackQuery(/^set_provider:(.+)$/, async (ctx) => {
   s.model = config.PROVIDERS[targetProvider].defaultModel;
 
   const targetName = config.PROVIDERS[targetProvider].name;
-  await ctx.answerCallbackQuery(`Berhasil memilih ${targetName}!`);
+  const emoji = PROVIDER_EMOJIS[targetProvider] || "🤖";
+  await ctx.answerCallbackQuery(`${targetName} dipilih!`);
+  await showModelDetail(ctx, targetProvider);
+});
+
+bot.callbackQuery(/^set_model:(.+):(.+)$/, async (ctx) => {
+  const providerKey = ctx.match[1];
+  const model = ctx.match[2];
+  const s = getUserSettings(ctx.from.id);
+  s.provider = providerKey;
+  s.model = model;
+
+  const p = config.PROVIDERS[providerKey];
+  const emoji = PROVIDER_EMOJIS[providerKey] || "🤖";
+  await ctx.answerCallbackQuery(`Model: ${model}`);
   await ctx.editMessageText(
-    `✅ *Platform berhasil diubah!*\n\n` +
-      `🔌 Platform aktif: *${targetName}*\n` +
-      `🤖 Model default: \`${s.model}\``,
+    `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
+    `┃   ✅ *BERHASIL*     ┃\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+    `${emoji} *${p.name}*\n` +
+    `🤖 Model: \`${model}\``,
     { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
   );
 });
@@ -532,9 +649,9 @@ bot.callbackQuery(/^set_ratio:(.+)$/, async (ctx) => {
   const s = getUserSettings(ctx.from.id);
   s.ratio = targetRatio;
 
-  await ctx.answerCallbackQuery(`Ratio diubah ke ${targetRatio}`);
+  await ctx.answerCallbackQuery(`Ratio: ${targetRatio}`);
   await ctx.editMessageText(
-    `✅ *Aspect Ratio berhasil diubah!*\n\n📐 *${targetRatio}*`,
+    `✅ *Ratio Diubah*\n\n📐 \`${targetRatio}\``,
     { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
   );
 });
@@ -549,9 +666,9 @@ bot.callbackQuery(/^set_resolution:(.+)$/, async (ctx) => {
   const s = getUserSettings(ctx.from.id);
   s.resolution = targetRes;
 
-  await ctx.answerCallbackQuery(`Resolusi diubah ke ${targetRes}`);
+  await ctx.answerCallbackQuery(`Resolusi: ${targetRes}`);
   await ctx.editMessageText(
-    `✅ *Resolusi berhasil diubah!*\n\n🖥️ *${targetRes}*`,
+    `✅ *Resolusi Diubah*\n\n🖥️ \`${targetRes}\``,
     { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
   );
 });
@@ -567,9 +684,9 @@ bot.callbackQuery(/^set_duration:(.+)$/, async (ctx) => {
   s.duration = targetDuration;
 
   const durationLabel = targetDuration === "auto" ? "Auto" : `${targetDuration} detik`;
-  await ctx.answerCallbackQuery(`Durasi diubah ke ${durationLabel}`);
+  await ctx.answerCallbackQuery(`Durasi: ${durationLabel}`);
   await ctx.editMessageText(
-    `✅ *Durasi berhasil diubah!*\n\n⏱️ *${durationLabel}*`,
+    `✅ *Durasi Diubah*\n\n⏱️ \`${durationLabel}\``,
     { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
   );
 });
