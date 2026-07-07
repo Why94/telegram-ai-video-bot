@@ -133,16 +133,19 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
       await showMotionPicker(ctx);
       break;
     case "help":
+      const statusList = Object.entries(config.PROVIDERS)
+        .map(([key, p]) => `${PROVIDER_EMOJIS[key] || "🤖"} ${p.usable ? "✅" : "❌"} ${p.name}`)
+        .join("\n");
       await ctx.reply(
         `📖 *Panduan Lengkap*\n\n` +
         `🎬 *Generate Video:*\n` +
         `Ketik \`/generate <prompt>\` atau klik *Generate Video* di menu\n\n` +
         `🖼 *Image-to-Video:*\n` +
-        `Kirim foto dengan caption/prompt\n\n` +
+        `Kirim foto dengan caption/prompt (pilih KIE + I2V model)\n\n` +
         `⚙️ *Pengaturan:*\n` +
         `Gunakan menu untuk ganti model, ratio, resolusi, durasi, motion\n\n` +
         `🎬 *Motion Control:* pan, zoom, tilt, orbit\n\n` +
-        `🤖 *Platform:* BytePlus, Kling, Hailuo, Luma, Runway, Veo, Leonardo, ERNIE, Replicate, RunningHub, FreeTheAi, KIE.ai`,
+        `📡 *Status Provider:*\n${statusList}`,
         { parse_mode: "Markdown" }
       );
       break;
@@ -188,28 +191,29 @@ async function showModelPicker(ctx) {
   function providerBtn(key) {
     const p = config.PROVIDERS[key];
     const emoji = PROVIDER_EMOJIS[key] || "🤖";
-    const label = activeKey === key ? `${emoji} ✅ ${p.name}` : `${emoji} ${p.name}`;
+    const disabled = p.usable === false ? " ❌" : "";
+    const label = activeKey === key ? `${emoji} ✅ ${p.name}` : `${emoji}${disabled} ${p.name}`;
     return { text: label, data: `set_provider:${key}` };
   }
 
   const keyboard = new InlineKeyboard()
+    .text(providerBtn("kie").text, providerBtn("kie").data)
     .text(providerBtn("byteplus").text, providerBtn("byteplus").data)
-    .text(providerBtn("runway").text, providerBtn("runway").data)
-    .row()
-    .text(providerBtn("kling").text, providerBtn("kling").data)
-    .text(providerBtn("hailuo").text, providerBtn("hailuo").data)
-    .row()
-    .text(providerBtn("luma").text, providerBtn("luma").data)
-    .text(providerBtn("veo").text, providerBtn("veo").data)
-    .row()
-    .text(providerBtn("leonardo").text, providerBtn("leonardo").data)
-    .text(providerBtn("ernie").text, providerBtn("ernie").data)
     .row()
     .text(providerBtn("replicate").text, providerBtn("replicate").data)
     .text(providerBtn("runninghub").text, providerBtn("runninghub").data)
     .row()
     .text(providerBtn("freetheai").text, providerBtn("freetheai").data)
-    .text(providerBtn("kie").text, providerBtn("kie").data)
+    .text(providerBtn("kling").text, providerBtn("kling").data)
+    .row()
+    .text(providerBtn("hailuo").text, providerBtn("hailuo").data)
+    .text(providerBtn("luma").text, providerBtn("luma").data)
+    .row()
+    .text(providerBtn("runway").text, providerBtn("runway").data)
+    .text(providerBtn("veo").text, providerBtn("veo").data)
+    .row()
+    .text(providerBtn("leonardo").text, providerBtn("leonardo").data)
+    .text(providerBtn("ernie").text, providerBtn("ernie").data)
     .row()
     .text("🏠 Main Menu", "menu:main");
 
@@ -217,8 +221,10 @@ async function showModelPicker(ctx) {
     `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
     `┃   🤖 *PILIH MODEL*   ┃\n` +
     `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-    `📌 *Aktif:* ${PROVIDER_EMOJIS[activeKey] || ""} *${config.PROVIDERS[activeKey].name}*\n\n` +
-    `👇 Klik untuk berganti provider:`,
+    `📌 *Aktif:* ${PROVIDER_EMOJIS[activeKey] || ""} *${config.PROVIDERS[activeKey].name}*\n` +
+    (config.PROVIDERS[activeKey].usable === false ? `⚠️ *Catatan:* ${config.PROVIDERS[activeKey].statusNote}\n` : "") +
+    `\n💜 KIE = siap pakai  |  ❌ = sedang bermasalah\n` +
+    `👇 Klik untuk berganti:`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
 }
@@ -352,11 +358,23 @@ bot.command("model", async (ctx) => {
   const arg = ctx.match?.trim().toLowerCase();
 
   if (arg && config.PROVIDERS[arg]) {
+    const p = config.PROVIDERS[arg];
+
+    if (p.usable === false) {
+      const emoji = PROVIDER_EMOJIS[arg] || "🤖";
+      await ctx.reply(
+        `❌ *${p.name}* tidak bisa digunakan\n\n` +
+        `${p.statusNote}\n\n` +
+        `💜 Silakan gunakan *KIE.ai* yang sudah siap pakai.`,
+        { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("💜 Pilih KIE", "set_provider:kie").text("🏠 Menu", "menu:main") }
+      );
+      return;
+    }
+
     const s = getUserSettings(ctx.from.id);
     s.provider = arg;
-    s.model = config.PROVIDERS[arg].defaultModel;
+    s.model = p.defaultModel;
 
-    const p = config.PROVIDERS[arg];
     const emoji = PROVIDER_EMOJIS[arg] || "🤖";
     await ctx.reply(
       `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
@@ -697,13 +715,25 @@ bot.callbackQuery(/^set_provider:(.+)$/, async (ctx) => {
     return;
   }
 
+  const p = config.PROVIDERS[targetProvider];
+
+  if (p.usable === false) {
+    await ctx.answerCallbackQuery("❌ Tidak bisa dipakai");
+    await ctx.reply(
+      `❌ *${p.name}* tidak bisa digunakan\n\n` +
+      `${p.statusNote}\n\n` +
+      `💜 Silakan gunakan *KIE.ai* yang sudah siap pakai.`,
+      { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("💜 Pilih KIE", "set_provider:kie").text("🏠 Menu", "menu:main") }
+    );
+    return;
+  }
+
   const s = getUserSettings(ctx.from.id);
   s.provider = targetProvider;
-  s.model = config.PROVIDERS[targetProvider].defaultModel;
+  s.model = p.defaultModel;
 
-  const targetName = config.PROVIDERS[targetProvider].name;
   const emoji = PROVIDER_EMOJIS[targetProvider] || "🤖";
-  await ctx.answerCallbackQuery(`${targetName} dipilih!`);
+  await ctx.answerCallbackQuery(`${p.name} dipilih!`);
   await showModelDetail(ctx, targetProvider);
 });
 
