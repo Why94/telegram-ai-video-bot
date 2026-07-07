@@ -66,7 +66,7 @@ npm run dev
 | `/help` | Panduan lengkap |
 | `/generate <prompt>` | Generate video dari prompt teks |
 | `/settings` | Lihat pengaturan saat ini |
-| `/model <provider>` | Ganti provider AI (byteplus, kling, hailuo, luma, runway, veo, replicate) |
+| `/model <provider>` | Ganti provider AI (byteplus, kling, hailuo, luma, runway, veo, replicate, runninghub) |
 | `/ratio 16:9\|9:16\|1:1\|...` | Set aspect ratio |
 | `/resolution 480p\|720p\|1080p\|4k` | Set resolusi video |
 | `/duration auto\|4-15` | Set durasi video (detik) |
