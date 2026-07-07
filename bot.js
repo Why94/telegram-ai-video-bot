@@ -52,6 +52,8 @@ const PROVIDER_EMOJIS = {
   ernie: "🔴",
   replicate: "🟡",
   runninghub: "🔶",
+  freetheai: "🆓",
+  kie: "💜",
 };
 
 async function showMainMenu(ctx, text = null) {
@@ -139,7 +141,7 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
         `⚙️ *Pengaturan:*\n` +
         `Gunakan menu untuk ganti model, ratio, resolusi, durasi, motion\n\n` +
         `🎬 *Motion Control:* pan, zoom, tilt, orbit\n\n` +
-        `🤖 *Platform:* BytePlus, Kling, Hailuo, Luma, Runway, Veo, Leonardo, ERNIE, Replicate, RunningHub`,
+        `🤖 *Platform:* BytePlus, Kling, Hailuo, Luma, Runway, Veo, Leonardo, ERNIE, Replicate, RunningHub, FreeTheAi, KIE.ai`,
         { parse_mode: "Markdown" }
       );
       break;
@@ -204,6 +206,9 @@ async function showModelPicker(ctx) {
     .row()
     .text(providerBtn("replicate").text, providerBtn("replicate").data)
     .text(providerBtn("runninghub").text, providerBtn("runninghub").data)
+    .row()
+    .text(providerBtn("freetheai").text, providerBtn("freetheai").data)
+    .text(providerBtn("kie").text, providerBtn("kie").data)
     .row()
     .text("🏠 Main Menu", "menu:main");
 
