@@ -70,6 +70,7 @@ async function showMainMenu(ctx, text = null) {
     `👋 Halo *${name}*!\n\n` +
     `📡 *Status Aktif:*\n` +
     `${emoji} Platform: *${providerInfo.name}*\n` +
+    `🤖 Model: \`${s.model}\`\n` +
     `📐 Ratio: \`${s.ratio}\`  🖥️ Res: \`${s.resolution || "720p"}\`\n` +
     `🎬 Motion: *${s.motion === "none" ? "❌ Off" : s.motion}*\n\n` +
     `━━━━━━━━━━━━━━━━━━━━━━\n` +
@@ -452,6 +453,8 @@ bot.command("generate", async (ctx) => {
     const p = config.PROVIDERS[s.provider];
     const emoji = PROVIDER_EMOJIS[s.provider] || "🤖";
     const isImgProvider = s.provider === "ernie";
+    const isI2V = s.model?.includes("image-to-video");
+    const modeLabel = isImgProvider ? "Text-to-Image" : (isI2V ? "Image-to-Video" : "Text-to-Video");
     const keyboard = new InlineKeyboard()
       .text("✍️ Ketik Prompt", "menu:generate")
       .text("🏠 Main Menu", "menu:main");
@@ -459,10 +462,11 @@ bot.command("generate", async (ctx) => {
       `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
       `┃   🎬 *GENERATE*     ┃\n` +
       `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
-    `${emoji} *${p.name}* aktif\n` +
+    `${emoji} *${p.name}*\n` +
+    `🤖 \`${s.model}\` — *${modeLabel}*\n` +
     `📐 \`${s.ratio}\` 🖥️ \`${s.resolution || "720p"}\` ⏱ \`${s.duration === "auto" ? "Auto" : s.duration + "s"}\` 🎬 *${s.motion === "none" ? "❌" : s.motion}*\n\n` +
-    `📝 *Tulis prompt untuk ${isImgProvider ? "gambar" : "video"}:*\n\n` +
-    `Contoh:\n` +
+    (isI2V ? `🖼 *Kirim foto dengan caption sebagai prompt*` : `📝 *Tulis prompt untuk ${isImgProvider ? "gambar" : "video"}:*`) +
+    `\n\nContoh:\n` +
     `\`/generate Cinematic drone shot of a tropical island at sunset, 4K, slow motion\``,
       { parse_mode: "Markdown", reply_markup: keyboard }
     );
