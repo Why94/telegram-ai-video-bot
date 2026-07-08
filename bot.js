@@ -100,6 +100,14 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
       const genP = config.PROVIDERS[genS.provider];
       const genEmoji = PROVIDER_EMOJIS[genS.provider] || "🤖";
       const genIsImg = genS.provider === "ernie";
+      if (genP.usable === false) {
+        await ctx.reply(
+          `❌ *${genP.name}* tidak bisa digunakan.\n\n${genP.statusNote}\n\n` +
+          `💜 Silakan ganti provider lewat menu *Model* atau ketik \`/model kie\``,
+          { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🤖 Pilih Model", "menu:model").text("🏠 Menu", "menu:main") }
+        );
+        break;
+      }
       await ctx.reply(
         `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
         `┃   🎬 *GENERATE*     ┃\n` +
@@ -474,6 +482,16 @@ bot.command("generate", async (ctx) => {
     const p = config.PROVIDERS[s.provider];
     const emoji = PROVIDER_EMOJIS[s.provider] || "🤖";
     const isImgProvider = s.provider === "ernie";
+
+    if (p.usable === false) {
+      await ctx.reply(
+        `❌ *${p.name}* tidak bisa digunakan.\n\n${p.statusNote}\n\n` +
+        `💜 Ketik \`/model kie\` untuk pake KIE.ai yang siap pakai.`,
+        { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("💜 Pilih KIE", "set_provider:kie").text("🏠 Menu", "menu:main") }
+      );
+      return;
+    }
+
     const isI2V = s.model?.includes("image-to-video");
     const modeLabel = isImgProvider ? "Text-to-Image" : (isI2V ? "Image-to-Video" : "Text-to-Video");
     const keyboard = new InlineKeyboard()
@@ -541,6 +559,16 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   const s = getUserSettings(userId);
   const providerKey = s.provider;
   const providerInfo = config.PROVIDERS[providerKey];
+
+  if (providerInfo.usable === false) {
+    const errMsg = `❌ *${providerInfo.name}* tidak bisa digunakan.\n\n${providerInfo.statusNote}\n\nSilakan ganti provider lewat menu *Model*.`;
+    if (statusMsg) {
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, errMsg, { parse_mode: "Markdown" });
+    } else {
+      await ctx.reply(errMsg, { parse_mode: "Markdown" });
+    }
+    return;
+  }
 
   // Send initial status
   const isImageProvider = providerKey === "ernie";
