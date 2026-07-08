@@ -582,7 +582,7 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   const startingText = `⏳ *Memulai Generate ${genLabel}...*\n\n` +
     `🔌 Platform: *${providerInfo.name}*\n` +
     `🤖 Model: \`${s.model}\`\n` +
-    `📝 Prompt: ${promptSafe}${prompt.length > 100 ? "..." : ""}\n\n` +
+    `📝 Prompt: ${ps(100)}${prompt.length > 100 ? "..." : ""}\n\n` +
     `🔄 Mengirim ke API...`;
 
   if (!statusMsg) {
