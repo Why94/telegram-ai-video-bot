@@ -54,6 +54,7 @@ const PROVIDER_EMOJIS = {
   runninghub: "🔶",
   freetheai: "🆓",
   kie: "💜",
+  pollinations: "🌸",
 };
 
 async function showMainMenu(ctx, text = null) {
@@ -204,6 +205,8 @@ async function showModelPicker(ctx) {
     .text(providerBtn("runninghub").text, providerBtn("runninghub").data)
     .row()
     .text(providerBtn("freetheai").text, providerBtn("freetheai").data)
+    .text(providerBtn("pollinations").text, providerBtn("pollinations").data)
+    .row()
     .text(providerBtn("kling").text, providerBtn("kling").data)
     .row()
     .text(providerBtn("hailuo").text, providerBtn("hailuo").data)
