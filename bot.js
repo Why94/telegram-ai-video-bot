@@ -24,21 +24,34 @@ function getUserSettings(userId) {
 // ─── Bot Instance ────────────────────────────────────────────────────────────
 const bot = new Bot(config.telegramToken);
 
+// ─── Price List ───────────────────────────────────────────────────────────────
+const PRICE_LIST = [
+  { id: "kling_pro", name: "Kling Motion Control 3.0 Pro", price: "8rb" },
+  { id: "kling_std", name: "Kling Motion Control 3.0 STD", price: "5rb" },
+  { id: "kling_26_pro", name: "Kling Motion Control 2.6 Pro", price: "4rb" },
+  { id: "kling_26_std", name: "Kling Motion Control 2.6 STD", price: "2rb" },
+  { id: "kling_fhd", name: "Kling Video 3.0 Full HD 15s", price: "6rb" },
+  { id: "grock3", name: "Grock 3.0 720P 10s", price: "2rb", provider: "kie", model: "grok-imagine/text-to-video" },
+  { id: "grock4", name: "Grock 4.0 720P 15s", price: "4rb", provider: "pollinations", model: "grok-video-pro" },
+  { id: "veo31", name: "Veo 3.1 Fast", price: "2rb", provider: "pollinations", model: "veo" },
+];
+
+const PRICE_LIST_KEYBOARD = new InlineKeyboard();
+for (const item of PRICE_LIST) {
+  const label = item.provider ? `${item.name} (${item.price})` : `🔜 ${item.name} (${item.price})`;
+  PRICE_LIST_KEYBOARD.text(label, `pilih_model:${item.id}`);
+  PRICE_LIST_KEYBOARD.row();
+}
+PRICE_LIST_KEYBOARD.text("⬅️ Kembali", "menu:main");
+
 // ─── Main Menu ───────────────────────────────────────────────────────────────
 function mainMenuKeyboard() {
   return new InlineKeyboard()
-    .text("🎬 Generate", "menu:generate")
-    .text("⚙️ Settings", "menu:settings")
+    .text("🎬 Buat Video", "menu:video")
+    .text("🖼️ Buat Gambar", "menu:image")
     .row()
-    .text("🤖 Model", "menu:model")
-    .text("🎬 Motion", "menu:motion")
-    .row()
-    .text("📐 Ratio", "menu:ratio")
-    .text("⏱ Duration", "menu:duration")
-    .row()
-    .text("🖥️ Resolution", "menu:resolution")
-    .row()
-    .text("❓ Help", "menu:help");
+    .text("🔑 Beli Akun", "menu:akun")
+    .text("💳 Top Up", "menu:topup");
 }
 
 const PROVIDER_EMOJIS = {
@@ -64,24 +77,48 @@ async function showMainMenu(ctx, text = null) {
   const emoji = PROVIDER_EMOJIS[s.provider] || "🤖";
 
   const msg = text || (
-    `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
-    `┃   🎬 *AI VIDEO GEN*   ┃\n` +
-    `┃   *BOT* 🚀            ┃\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
+    `┌─────────────────────┐\n` +
+    `│   🎬 *AI VIDEO*     │\n` +
+    `│   *GENERATOR* 🚀    │\n` +
+    `└─────────────────────┘\n\n` +
     `👋 Halo *${name}*!\n\n` +
-    `📡 *Status Aktif:*\n` +
-    `${emoji} Platform: *${providerInfo.name}*\n` +
-    `🤖 Model: \`${s.model}\`\n` +
-    `📐 Ratio: \`${s.ratio}\`  🖥️ Res: \`${s.resolution || "720p"}\`\n` +
-    `🎬 Motion: *${s.motion === "none" ? "❌ Off" : s.motion}*\n\n` +
-    `━━━━━━━━━━━━━━━━━━━━━━\n` +
-    `👇 *Pilih menu:*`
+    `📡 *Status:* ${emoji} ${providerInfo.name}\n` +
+    `🤖 \`${s.model}\`\n` +
+    `📐 \`${s.ratio}\` 🖥️ \`${s.resolution || "720p"}\` ⏱ \`${s.duration === "auto" ? "Auto" : s.duration + "s"}\`\n\n` +
+    `👇 Pilih menu:`
   );
 
   await ctx.reply(msg, {
     parse_mode: "Markdown",
     reply_markup: mainMenuKeyboard(),
   });
+}
+
+async function showPriceList(ctx) {
+  const lines = PRICE_LIST.map(i =>
+    i.provider ? `• ${i.name} (${i.price})` : `• 🔜 ${i.name} (${i.price})`
+  ).join("\n");
+
+  await ctx.reply(
+    `┌────────────────────────────────────┐\n` +
+    `│       📋 *LIST HARGA VIDEO*        │\n` +
+    `└────────────────────────────────────┘\n\n` +
+    `${lines}\n\n` +
+    `🔜 = Coming Soon\n` +
+    `👇 Klik model untuk memulai:`,
+    { parse_mode: "Markdown", reply_markup: PRICE_LIST_KEYBOARD }
+  );
+}
+
+async function showPlaceholder(ctx, title, body) {
+  const keyboard = new InlineKeyboard().text("⬅️ Kembali", "menu:main");
+  await ctx.reply(
+    `┌─────────────────────┐\n` +
+    `│   ${title}           │\n` +
+    `└─────────────────────┘\n\n` +
+    body,
+    { parse_mode: "Markdown", reply_markup: keyboard }
+  );
 }
 
 // ─── /start Command ──────────────────────────────────────────────────────────
@@ -118,6 +155,37 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
         `Contoh:\n` +
         `\`/generate A golden retriever running on the beach, cinematic\``,
         { parse_mode: "Markdown" }
+      );
+      break;
+    case "video":
+      await showPriceList(ctx);
+      break;
+    case "image":
+      await showPlaceholder(ctx, "🖼️ *IMAGE GEN*",
+        `Fitur image generation masih dalam pengembangan.\n\n` +
+        `🔜 Nanti bisa bikin gambar pake:\n` +
+        `• KIE Grok Imagine\n` +
+        `• Pollinations AI\n\n` +
+        `Sementara ini, fokus ke *Buat Video* dulu ya! 🎬`
+      );
+      break;
+    case "akun":
+      await showPlaceholder(ctx, "🔑 *BELI AKUN*",
+        `Mau beli akun Leonardo AI atau provider lain?\n\n` +
+        `📞 *Kontak Admin:*\n` +
+        `Hubungi via WhatsApp untuk info harga & stok.\n\n` +
+        `🔜 Fitur ini masih dalam pengembangan.`
+      );
+      break;
+    case "topup":
+      await showPlaceholder(ctx, "💳 *TOP UP*",
+        `Mau isi saldo?\n\n` +
+        `💜 *KIE.ai*: 80 credits gratis (≈8 video)\n` +
+        `🌸 *Pollinations*: 1.5 Pollen/minggu gratis\n\n` +
+        `📞 *Top Up via Admin:* Hubungi WhatsApp.\n\n` +
+        `Atau daftar sendiri:\n` +
+        `• KIE: https://kie.ai/logs\n` +
+        `• Pollinations: https://enter.pollinations.ai`
       );
       break;
     case "settings":
@@ -159,6 +227,47 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
       );
       break;
   }
+});
+
+// ─── Model Selection Callback Handler ───────────────────────────────────────
+bot.callbackQuery(/^pilih_model:(.+)$/, async (ctx) => {
+  const id = ctx.match[1];
+  await ctx.answerCallbackQuery();
+
+  const item = PRICE_LIST.find(i => i.id === id);
+  if (!item) {
+    await ctx.reply("❌ Model tidak dikenal.", { reply_markup: new InlineKeyboard().text("⬅️ Kembali", "menu:video") });
+    return;
+  }
+
+  if (!item.provider) {
+    await ctx.reply(
+      `🔜 *${item.name}*\n\n` +
+      `Fitur ini masih dalam pengembangan. Coming soon!\n\n` +
+      `Sementara itu, coba model yang sudah tersedia:\n` +
+      `• 💜 *Grock 3.0* (KIE.ai — gratis 80 credit)\n` +
+      `• 🌸 *Veo 3.1 Fast* (Pollinations AI)\n\n` +
+      `👇 Klik model di bawah atau pilih di menu *Buat Video*.`,
+      { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🎬 Buat Video", "menu:video").text("🏠 Menu", "menu:main") }
+    );
+    return;
+  }
+
+  const s = getUserSettings(ctx.from.id);
+  s.provider = item.provider;
+  s.model = item.model;
+  const p = config.PROVIDERS[item.provider];
+  const emoji = PROVIDER_EMOJIS[item.provider] || "🤖";
+
+  await ctx.reply(
+    `✅ *${item.name}* dipilih!\n\n` +
+    `${emoji} *${p.name}*\n` +
+    `🤖 \`${item.model}\`\n\n` +
+    `📝 *Ketik prompt untuk video:*\n\n` +
+    `Contoh: \`/generate Cinematic drone shot over a tropical island, 4K, slow motion\`\n\n` +
+    `🖼 Atau kirim *foto dengan caption* untuk Image-to-Video (khusus KIE).`,
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main") }
+  );
 });
 
 // ─── Shared functions ──────────────────────────────────────────────────────
