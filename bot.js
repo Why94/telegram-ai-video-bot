@@ -602,12 +602,13 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   });
 
   if (!submitResult.success) {
+    const errSafe = submitResult.error.replace(/[_*`]/g, "");
     await ctx.api.editMessageText(
       ctx.chat.id,
       statusMsg.message_id,
       `❌ *Gagal submit task!*\n\n` +
         `🔌 Platform: *${providerInfo.name}*\n` +
-        `Error: ${submitResult.error}`,
+        `Error: ${errSafe}`,
       { parse_mode: "Markdown" }
     );
     return;
@@ -616,17 +617,21 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   const taskId = submitResult.taskId;
 
   // Update status: submitted
-  await ctx.api.editMessageText(
-    ctx.chat.id,
-    statusMsg.message_id,
-    `✅ *Task berhasil di-submit!*\n\n` +
-      `🔌 Platform: *${providerInfo.name}*\n` +
-      `🆔 Task ID: \`${taskId}\`\n` +
-      `📝 Prompt: ${ps(80)}${prompt.length > 80 ? "..." : ""}\n\n` +
-      `⏳ Menunggu proses selesai... (max 10 menit)\n` +
-      `🔄 Status: *Queued*`,
-    { parse_mode: "Markdown" }
-  );
+  try {
+    await ctx.api.editMessageText(
+      ctx.chat.id,
+      statusMsg.message_id,
+      `✅ *Task berhasil di-submit!*\n\n` +
+        `🔌 Platform: *${providerInfo.name}*\n` +
+        `🆔 Task ID: \`${taskId}\`\n` +
+        `📝 Prompt: ${ps(80)}${prompt.length > 80 ? "..." : ""}\n\n` +
+        `⏳ Menunggu proses selesai... (max 10 menit)\n` +
+        `🔄 Status: *Queued*`,
+      { parse_mode: "Markdown" }
+    );
+  } catch (e) {
+    console.error("editMsg submit success FAILED:", e.message);
+  }
 
   // Poll for completion with status updates
   let lastEditedStatus = "queued";
@@ -734,7 +739,7 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
       `❌ *Generate Video Gagal*\n\n` +
         `🔌 Platform: *${providerInfo.name}*\n` +
         `🆔 Task ID: \`${taskId}\`\n\n` +
-        `Error: ${result.error}\n\n` +
+        `Error: ${(result.error || "").replace(/[_*`]/g, "")}\n\n` +
         `_Silakan coba lagi atau ubah prompt Anda._`,
       { parse_mode: "Markdown" }
     );
