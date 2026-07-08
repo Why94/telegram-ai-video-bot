@@ -473,6 +473,23 @@ bot.command("menu", async (ctx) => {
   await showMainMenu(ctx);
 });
 
+// ─── /credits Command ───────────────────────────────────────────────────────
+bot.command("credits", async (ctx) => {
+  const keyboard = new InlineKeyboard()
+    .url("🔗 Buka KIE Logs", "https://kie.ai/logs")
+    .url("🌸 Pollinations Balance", "https://enter.pollinations.ai")
+    .text("🏠 Menu", "menu:main");
+  await ctx.reply(
+    `💳 *Cek Credit*\n\n` +
+    `🔹 *KIE.ai*: Buka https://kie.ai/logs (login)\n` +
+    `🔹 *Pollinations*: Buka https://enter.pollinations.ai\n\n` +
+    `📌 *KIE* punya 80 credits gratis (≈8 video).\n` +
+    `📌 *Pollinations* dapet 1.5 Pollen/minggu gratis.\n\n` +
+    `👇 Klik link di bawah:`,
+    { parse_mode: "Markdown", reply_markup: keyboard }
+  );
+});
+
 // ─── /generate Command ──────────────────────────────────────────────────────
 bot.command("generate", async (ctx) => {
   const prompt = ctx.match?.trim();
