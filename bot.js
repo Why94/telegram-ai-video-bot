@@ -548,10 +548,12 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   const genLabel = isImageProvider ? "Gambar" : "Video";
   let statusMsg = existingStatusMsg;
 
+  const promptMd = prompt.replace(/[_*]/g, "");
+
   const startingText = `⏳ *Memulai Generate ${genLabel}...*\n\n` +
     `🔌 Platform: *${providerInfo.name}*\n` +
     `🤖 Model: \`${s.model}\`\n` +
-    `📝 Prompt: _${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}_\n\n` +
+    `📝 Prompt: _${promptMd.substring(0, 100)}${prompt.length > 100 ? "..." : ""}_\n\n` +
     `🔄 Mengirim ke API...`;
 
   if (!statusMsg) {
@@ -591,7 +593,7 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
     `✅ *Task berhasil di-submit!*\n\n` +
       `🔌 Platform: *${providerInfo.name}*\n` +
       `🆔 Task ID: \`${taskId}\`\n` +
-      `📝 Prompt: _${prompt.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
+      `📝 Prompt: _${promptMd.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
       `⏳ Menunggu proses selesai... (max 10 menit)\n` +
       `🔄 Status: *Queued*`,
     { parse_mode: "Markdown" }
@@ -665,10 +667,10 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
       isImage
         ? `🖼 *AI Generated Image*\n\n` +
           `🔌 Platform: *${providerInfo.name}*\n` +
-          `📝 _${prompt.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`
+          `📝 _${promptMd.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`
         : `🎬 *AI Generated Video*\n\n` +
           `🔌 Platform: *${providerInfo.name}*\n` +
-          `📝 _${prompt.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`;
+          `📝 _${promptMd.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`;
 
     if (isImage) {
       const buffer = Buffer.from(result.videoUrl.split(",")[1], "base64");
@@ -682,12 +684,12 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
       ? `✅ *Selesai!*\n\n` +
         `🔌 Platform: *${providerInfo.name}*\n` +
         `🆔 Task ID: \`${taskId}\`\n` +
-        `📝 Prompt: _${prompt.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
+        `📝 Prompt: _${promptMd.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
         `🖼️ Gambar telah terkirim!`
       : `✅ *Selesai!*\n\n` +
         `🔌 Platform: *${providerInfo.name}*\n` +
         `🆔 Task ID: \`${taskId}\`\n` +
-        `📝 Prompt: _${prompt.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
+        `📝 Prompt: _${promptMd.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
         `✨ Video telah terkirim!`;
 
     await ctx.api.editMessageText(
