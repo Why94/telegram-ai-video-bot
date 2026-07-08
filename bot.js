@@ -560,6 +560,8 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   const providerKey = s.provider;
   const providerInfo = config.PROVIDERS[providerKey];
 
+  let statusMsg = existingStatusMsg;
+
   if (providerInfo.usable === false) {
     const errMsg = `❌ *${providerInfo.name}* tidak bisa digunakan.\n\n${providerInfo.statusNote}\n\nSilakan ganti provider lewat menu *Model*.`;
     if (statusMsg) {
@@ -574,14 +576,13 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   const isImageProvider = providerKey === "ernie";
   const modeText = isImageProvider ? "✍️ Text-to-Image" : (imageBase64 ? "🖼 Image-to-Video" : "✍️ Text-to-Video");
   const genLabel = isImageProvider ? "Gambar" : "Video";
-  let statusMsg = existingStatusMsg;
 
-  const promptMd = prompt.replace(/[_*]/g, "");
+  const ps = (n) => prompt.substring(0, n).replace(/[_*`\[\]()]/g, "");
 
   const startingText = `⏳ *Memulai Generate ${genLabel}...*\n\n` +
     `🔌 Platform: *${providerInfo.name}*\n` +
     `🤖 Model: \`${s.model}\`\n` +
-    `📝 Prompt: _${promptMd.substring(0, 100)}${prompt.length > 100 ? "..." : ""}_\n\n` +
+    `📝 Prompt: ${promptSafe}${prompt.length > 100 ? "..." : ""}\n\n` +
     `🔄 Mengirim ke API...`;
 
   if (!statusMsg) {
@@ -621,7 +622,7 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
     `✅ *Task berhasil di-submit!*\n\n` +
       `🔌 Platform: *${providerInfo.name}*\n` +
       `🆔 Task ID: \`${taskId}\`\n` +
-      `📝 Prompt: _${promptMd.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
+      `📝 Prompt: ${ps(80)}${prompt.length > 80 ? "..." : ""}\n\n` +
       `⏳ Menunggu proses selesai... (max 10 menit)\n` +
       `🔄 Status: *Queued*`,
     { parse_mode: "Markdown" }
@@ -695,10 +696,10 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
       isImage
         ? `🖼 *AI Generated Image*\n\n` +
           `🔌 Platform: *${providerInfo.name}*\n` +
-          `📝 _${promptMd.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`
+          `📝 ${ps(150)}${prompt.length > 150 ? "..." : ""}`
         : `🎬 *AI Generated Video*\n\n` +
           `🔌 Platform: *${providerInfo.name}*\n` +
-          `📝 _${promptMd.substring(0, 150)}${prompt.length > 150 ? "..." : ""}_`;
+          `📝 ${ps(150)}${prompt.length > 150 ? "..." : ""}`;
 
     if (isImage) {
       const buffer = Buffer.from(result.videoUrl.split(",")[1], "base64");
@@ -712,12 +713,12 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
       ? `✅ *Selesai!*\n\n` +
         `🔌 Platform: *${providerInfo.name}*\n` +
         `🆔 Task ID: \`${taskId}\`\n` +
-        `📝 Prompt: _${promptMd.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
+        `📝 Prompt: ${ps(80)}${prompt.length > 80 ? "..." : ""}\n\n` +
         `🖼️ Gambar telah terkirim!`
       : `✅ *Selesai!*\n\n` +
         `🔌 Platform: *${providerInfo.name}*\n` +
         `🆔 Task ID: \`${taskId}\`\n` +
-        `📝 Prompt: _${promptMd.substring(0, 80)}${prompt.length > 80 ? "..." : ""}_\n\n` +
+        `📝 Prompt: ${ps(80)}${prompt.length > 80 ? "..." : ""}\n\n` +
         `✨ Video telah terkirim!`;
 
     await ctx.api.editMessageText(
