@@ -2,6 +2,7 @@ const { Bot, InlineKeyboard } = require("grammy");
 const config = require("./lib/config");
 const providers = require("./lib/providers");
 const helpers = require("./lib/telegram-helpers");
+const tiktok = require("./lib/tiktok");
 
 // ─── Per-user session settings (in-memory) ───────────────────────────────────
 const userSettings = new Map();
@@ -597,6 +598,47 @@ bot.command("credits", async (ctx) => {
     `👇 Klik link di bawah:`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
+});
+
+// ─── /tiktok Command ────────────────────────────────────────────────────────
+bot.command("tiktok", async (ctx) => {
+  const input = (ctx.match || "").trim();
+  if (!input) {
+    await ctx.reply(
+      `🎬 *TikTok Affiliator*\n\n` +
+      `Generate script + caption + hashtag buat promosi produk di TikTok.\n\n` +
+      `📝 *Cara pakai:*\n` +
+      `\`/tiktok <nama produk>\`\n\n` +
+      `Contoh:\n` +
+      `\`/tiktok serum vitamin c glowing\`\n` +
+      `\`/tiktok earphone bluetooth murah\`\n\n` +
+      `💡 Kategori auto-detect (skincare, fashion, electronics, food, fitness, home)`,
+      { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main") }
+    );
+    return;
+  }
+
+  const category = tiktok.detectCategory(input);
+  const content = tiktok.generateTikTokContent(input, category);
+  const safeProduct = input.replace(/[_*`]/g, " ");
+
+  const msg =
+    `🎬 *TIKTOK AFFILIATOR*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `📦 *Produk:* ${safeProduct}\n` +
+    `📂 *Kategori:* ${category || "umum"}\n\n` +
+    `${content.script}\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📝 *CAPTION:*\n${content.caption}\n\n` +
+    `🔖 ${content.hashtags.join(" ")}\n\n` +
+    `${content.thumbnail}\n\n` +
+    `🔗 *Jangan lupa tempelin link afiliasi di bio!*\n` +
+    `🎥 Mau bikin videonya juga? Ketik \`/generate ${safeProduct}\``;
+
+  await ctx.reply(msg, {
+    parse_mode: "Markdown",
+    reply_markup: new InlineKeyboard().text("🎥 Bikin Video", `menu:video`).text("🏠 Menu", "menu:main"),
+  });
 });
 
 // ─── /generate Command ──────────────────────────────────────────────────────
