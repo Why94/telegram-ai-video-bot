@@ -1096,30 +1096,35 @@ bot.callbackQuery(/^inv:(.+)$/, async (ctx) => {
     return;
   }
 
-  switch (action) {
-    case "menu": return inventory.showAdminMenu(ctx);
-    case "dashboard": return inventory.showDashboard(ctx);
-    case "products": return inventory.showProducts(ctx);
-    case "stats": return inventory.showStats(ctx);
-    case "history": return inventory.showHistory(ctx);
-    case "duplicates": return inventory.showDuplicates(ctx);
-    case "template": return inventory.sendTemplate(ctx);
-    case "upload_csv": return inventory.beginUpload(ctx, "csv");
-    case "upload_xlsx": return inventory.beginUpload(ctx, "excel");
-    case "search": return inventory.showSearch(ctx);
-    case "export": return inventory.showExport(ctx);
-    case "bulk": return inventory.showBulk(ctx);
-    case "dup_skip": return inventory.processImport(ctx, "skip");
-    case "dup_replace": return inventory.processImport(ctx, "replace");
-    case "dup_cancel": return inventory.processImport(ctx, "cancel");
-    case "export_csv": return inventory.doExport(ctx, "csv");
-    case "export_xlsx": return inventory.doExport(ctx, "excel");
-    case "export_avail": return inventory.doExport(ctx, "csv", { status: "AVAILABLE" });
-    default:
-      if (action.startsWith("filter:")) {
-        const status = action.split(":")[1];
-        return inventory.runSearch(ctx, { status }, 1);
-      }
+  try {
+    switch (action) {
+      case "menu": return inventory.showAdminMenu(ctx);
+      case "dashboard": return inventory.showDashboard(ctx);
+      case "products": return inventory.showProducts(ctx);
+      case "stats": return inventory.showStats(ctx);
+      case "history": return inventory.showHistory(ctx);
+      case "duplicates": return inventory.showDuplicates(ctx);
+      case "template": return inventory.sendTemplate(ctx);
+      case "upload_csv": return inventory.beginUpload(ctx, "csv");
+      case "upload_xlsx": return inventory.beginUpload(ctx, "excel");
+      case "search": return inventory.showSearch(ctx);
+      case "export": return inventory.showExport(ctx);
+      case "bulk": return inventory.showBulk(ctx);
+      case "dup_skip": return inventory.processImport(ctx, "skip");
+      case "dup_replace": return inventory.processImport(ctx, "replace");
+      case "dup_cancel": return inventory.processImport(ctx, "cancel");
+      case "export_csv": return inventory.doExport(ctx, "csv");
+      case "export_xlsx": return inventory.doExport(ctx, "excel");
+      case "export_avail": return inventory.doExport(ctx, "csv", { status: "AVAILABLE" });
+      default:
+        if (action.startsWith("filter:")) {
+          const status = action.split(":")[1];
+          return inventory.runSearch(ctx, { status }, 1);
+        }
+    }
+  } catch (e) {
+    console.error("[inventory] callback error:", e);
+    ctx.reply("❌ Error: " + (e.message || "unknown").replace(/[_*`]/g, "")).catch(() => {});
   }
 });
 
@@ -1150,9 +1155,10 @@ bot.on("message:text", async (ctx) => {
 // ─── Error Handler ───────────────────────────────────────────────────────────
 bot.catch((err) => {
   const ctx = err.ctx;
-  console.error(`Error while handling update ${ctx.update.update_id}:`);
+  console.error(`Error while handling update ${ctx?.update?.update_id}:`);
   console.error(err.error);
-  ctx.reply("⚠️ Terjadi error internal. Silakan coba lagi nanti.").catch(() => {});
+  if (err.error && err.error.stack) console.error(err.error.stack);
+  if (ctx) ctx.reply("⚠️ Terjadi error internal. Silakan coba lagi nanti.").catch(() => {});
 });
 
 // ─── Start Bot ───────────────────────────────────────────────────────────────
