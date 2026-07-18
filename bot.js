@@ -3,6 +3,8 @@ const config = require("./lib/config");
 const providers = require("./lib/providers");
 const helpers = require("./lib/telegram-helpers");
 const tiktok = require("./lib/tiktok");
+const inventory = require("./lib/inventory/admin");
+const invDb = require("./lib/inventory/db");
 
 // ─── Per-user session settings (in-memory) ───────────────────────────────────
 const userSettings = new Map();
@@ -641,6 +643,42 @@ bot.command("tiktok", async (ctx) => {
   });
 });
 
+// ─── Admin Panel: Bulk Account Inventory ────────────────────────────────────
+bot.command("admin", async (ctx) => {
+  await inventory.showAdminMenu(ctx);
+});
+
+bot.command("invsearch", async (ctx) => {
+  const raw = ctx.match?.trim() || "";
+  const filters = {};
+  for (const part of raw.split(/\s+/).filter(Boolean)) {
+    const [k, ...v] = part.split("=");
+    if (k && v.length) filters[k] = v.join("=").trim();
+  }
+  await inventory.runSearch(ctx, filters, 1);
+});
+
+bot.command("invbulk", async (ctx) => {
+  const raw = ctx.match?.trim() || "";
+  const [action, ...rest] = raw.split(/\s+/);
+  if (!action) {
+    await inventory.showBulk(ctx);
+    return;
+  }
+  if (action === "status") {
+    const status = rest[0];
+    const ids = rest.slice(1).join("").split(",").filter(Boolean);
+    await inventory.runBulk(ctx, "status", ids, status);
+  } else if (action === "move") {
+    const idsPart = rest[rest.length - 1];
+    const product = rest.slice(0, -1).join(" ").replace(/^"|"$/g, "");
+    await inventory.runBulk(ctx, "move", idsPart.split(",").filter(Boolean), product);
+  } else {
+    const ids = rest.join("").split(",").filter(Boolean);
+    await inventory.runBulk(ctx, action, ids);
+  }
+});
+
 // ─── /generate Command ──────────────────────────────────────────────────────
 bot.command("generate", async (ctx) => {
   const prompt = ctx.match?.trim();
@@ -1034,6 +1072,49 @@ bot.callbackQuery(/^set_motion:(.+)$/, async (ctx) => {
   );
 });
 
+// ─── Inventory Admin: Callback Handlers ──────────────────────────────────────
+bot.callbackQuery(/^inv:(.+)$/, async (ctx) => {
+  const action = ctx.match[1];
+  await ctx.answerCallbackQuery();
+  if (!inventory.isAdmin(ctx)) {
+    await ctx.reply("⛔ Akses ditolak.");
+    return;
+  }
+
+  switch (action) {
+    case "menu": return inventory.showAdminMenu(ctx);
+    case "dashboard": return inventory.showDashboard(ctx);
+    case "products": return inventory.showProducts(ctx);
+    case "stats": return inventory.showStats(ctx);
+    case "history": return inventory.showHistory(ctx);
+    case "duplicates": return inventory.showDuplicates(ctx);
+    case "template": return inventory.sendTemplate(ctx);
+    case "upload_csv": return inventory.beginUpload(ctx, "csv");
+    case "upload_xlsx": return inventory.beginUpload(ctx, "excel");
+    case "search": return inventory.showSearch(ctx);
+    case "export": return inventory.showExport(ctx);
+    case "bulk": return inventory.showBulk(ctx);
+    case "dup_skip": return inventory.processImport(ctx, "skip");
+    case "dup_replace": return inventory.processImport(ctx, "replace");
+    case "dup_cancel": return inventory.processImport(ctx, "cancel");
+    case "export_csv": return inventory.doExport(ctx, "csv");
+    case "export_xlsx": return inventory.doExport(ctx, "excel");
+    case "export_avail": return inventory.doExport(ctx, "csv", { status: "AVAILABLE" });
+    default:
+      if (action.startsWith("filter:")) {
+        const status = action.split(":")[1];
+        return inventory.runSearch(ctx, { status }, 1);
+      }
+  }
+});
+
+// ─── Inventory Admin: Document Upload Handler ────────────────────────────────
+bot.on("message:document", async (ctx) => {
+  const pending = inventory.pendingUploads.get(ctx.from?.id);
+  if (!pending || pending.stage !== "await_file") return; // not an inventory upload
+  await inventory.handleUpload(ctx);
+});
+
 // ─── Fallback: Unknown text messages ─────────────────────────────────────────
 bot.on("message:text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return;
@@ -1061,6 +1142,9 @@ async function setupBot() {
     { command: "duration", description: "⏱ Set durasi video" },
     { command: "settings", description: "⚙️ Lihat pengaturan" },
     { command: "help", description: "❓ Bantuan" },
+    { command: "admin", description: "🛠️ Admin Panel (inventory akun)" },
+    { command: "invsearch", description: "🔍 Cari akun inventory" },
+    { command: "invbulk", description: "🔁 Bulk action akun (delete/disable/status/move)" },
   ]);
 }
 
@@ -1069,4 +1153,7 @@ console.log("🎬 AI Video Generator Bot (Multi-Model)");
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 console.log("🚀 Starting bot...\n");
 
-setupBot().then(() => bot.start()).catch(() => bot.start());
+setupBot()
+  .then(() => invDb.init())
+  .then(() => bot.start())
+  .catch(() => bot.start());
