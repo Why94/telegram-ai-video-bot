@@ -1180,7 +1180,8 @@ async function showBuyMenu(ctx) {
 
   const kb = new InlineKeyboard();
   products.forEach((p, i) => {
-    kb.text(`${p.product_name} (${p.available})`, `buy:${i}`).row();
+    const label = p.price ? `${p.product_name} (${p.available}) • ${p.price}` : `${p.product_name} (${p.available})`;
+    kb.text(label, `buy:${i}`).row();
   });
   kb.text("🏠 Menu", "menu:main");
 
@@ -1190,7 +1191,7 @@ async function showBuyMenu(ctx) {
   await ctx.reply(
     "🛒 *BELI AKUN DIGITAL*\n\n" +
     "Pilih produk di bawah. Stok = akun AVAILABLE siap kirim otomatis.\n\n" +
-    products.map((p) => `• ${p.product_name}: ${p.available} tersedia`).join("\n"),
+    products.map((p) => `• ${p.product_name}: ${p.available} tersedia${p.price ? ` • ${p.price}` : ""}`).join("\n"),
     { parse_mode: "Markdown", reply_markup: kb }
   );
 }
@@ -1211,6 +1212,7 @@ async function showProductDetail(ctx, index) {
   await ctx.reply(
     `🛒 *${p.product_name}*\n\n` +
     `📦 Stok tersedia: *${p.available}*\n` +
+    (p.price ? `💰 Harga: *${p.price}*\n` : "") +
     `💡 Akun akan dikirim otomatis setelah konfirmasi.\n\n` +
     `_Catatan: fitur ini mengambil akun langsung dari inventory admin._`,
     { parse_mode: "Markdown", reply_markup: kb }
