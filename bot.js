@@ -692,6 +692,64 @@ bot.command("invbulk", async (ctx) => {
   }
 });
 
+// ─── Credit Commands ─────────────────────────────────────────────────────────
+bot.command("credit", async (ctx) => {
+  const bal = inventory.getCredit(ctx.from.id);
+  await ctx.reply(
+    `💳 *SALDO KREDIT*\n\n` +
+    `👤 User: ${ctx.from?.first_name || ctx.from.id}\n` +
+    `💰 Saldo: *${bal} kredit*\n\n` +
+    `Gunakan kredit untuk beli akun di menu 🔑 Beli Akun.\n` +
+    `Top up via admin: hubungi untuk isi saldo.`,
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🛒 Beli Akun", "menu:akun").text("🏠 Menu", "menu:main") }
+  );
+});
+
+bot.command("addcredit", async (ctx) => {
+  if (!inventory.isAdmin(ctx)) {
+    await ctx.reply("⛔ Akses ditolak.");
+    return;
+  }
+  const raw = (ctx.match || "").trim();
+  const [target, amountStr] = raw.split(/\s+/);
+  const amount = parseInt(amountStr, 10);
+  if (!target || isNaN(amount) || amount <= 0) {
+    await ctx.reply("❌ Format: `/addcredit <user_id> <jumlah>`\nContoh: `/addcredit 5241655508 100`", { parse_mode: "Markdown" });
+    return;
+  }
+  try {
+    const newBal = inventory.addCredit(target, amount, { adminUserId: String(ctx.from.id) });
+    await ctx.reply(`✅ Kredit ditambah!\n\nUser: \`${target}\`\nJumlah: +${amount}\nSaldo baru: *${newBal}*`, { parse_mode: "Markdown" });
+  } catch (e) {
+    await ctx.reply("❌ Gagal: " + e.message.replace(/[_*`]/g, ""));
+  }
+});
+
+bot.command("topupcredit", async (ctx) => {
+  const raw = (ctx.match || "").trim();
+  const amount = parseInt(raw, 10);
+  if (!amount || amount <= 0) {
+    await ctx.reply("❌ Format: `/topupcredit <jumlah>`\nContoh: `/topupcredit 100`", { parse_mode: "Markdown" });
+    return;
+  }
+  inventory.ensureUser(ctx.from.id, { username: ctx.from?.username, first_name: ctx.from?.first_name });
+  await ctx.reply(
+    `📥 *PERMINTAAN TOP UP*\n\n` +
+    `User: \`${ctx.from.id}\`\nJumlah: ${amount} kredit\n\n` +
+    `Permintaan dikirim ke admin. Setelah dikonfirmasi, saldo akan bertambah.`,
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main") }
+  );
+  // notify admins
+  const admins = (process.env.ADMIN_USER_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+  for (const a of admins) {
+    try {
+      await ctx.api.sendMessage(a,
+        `🔔 *Permintaan Top Up Kredit*\nUser: \`${ctx.from.id}\` (${ctx.from?.first_name || ""})\nJumlah: ${amount}\n\nApprove: \`/addcredit ${ctx.from.id} ${amount}\``,
+        { parse_mode: "Markdown" });
+    } catch {}
+  }
+});
+
 // ─── /generate Command ──────────────────────────────────────────────────────
 bot.command("generate", async (ctx) => {
   const prompt = ctx.match?.trim();
@@ -1227,16 +1285,29 @@ async function handleBuy(ctx, index) {
     return;
   }
 
-  const statusMsg = await ctx.reply("⏳ Memproses pembelian & mengambil akun...");
+  const statusMsg = await ctx.reply("⏳ Memproses pembelian & mengecek saldo kredit...");
   try {
-    const result = inventory.purchaseAccount(p.product_name, {
-      orderId: `TG-${ctx.from.id}-${Date.now()}`,
+    const result = inventory.purchaseWithCredit(p.product_name, {
       telegramUserId: String(ctx.from.id),
+      username: ctx.from?.username,
+      first_name: ctx.from?.first_name,
+      price: p.price,
     });
 
     if (!result.success) {
-      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
-        `❌ Maaf, stok *${p.product_name}* habis. Silakan pilih produk lain.`,
+      let msg;
+      if (result.reason === "OUT_OF_STOCK") {
+        msg = `❌ Maaf, stok *${p.product_name}* habis. Silakan pilih produk lain.`;
+      } else if (result.reason === "INSUFFICIENT_CREDIT") {
+        msg = `❌ *Kredit tidak cukup!*\n\n` +
+          `Produk: *${p.product_name}*\n` +
+          `Harga: ${result.needed}\n` +
+          `Saldo Anda: ${result.have}\n\n` +
+          `Ketik \`/credit\` untuk cek saldo, atau hubungi admin untuk top up.`;
+      } else {
+        msg = `❌ Gagal memproses pembelian.`;
+      }
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, msg,
         { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("⬅️ Kembali", "buymenu") });
       return;
     }
@@ -1245,6 +1316,8 @@ async function handleBuy(ctx, index) {
     const caption =
       `✅ *AKUN BERHASIL DIBELI*\n\n` +
       `📦 Produk: *${acc.product_name}*\n` +
+      (result.price ? `💰 Harga: ${result.price} kredit\n` : "") +
+      (result.balance != null ? `💳 Sisa saldo: ${result.balance} kredit\n` : "") +
       `📧 Email: \`${acc.email}\`\n` +
       `🔑 Password: \`${acc.password}\`\n` +
       (acc.recovery_email ? `📧 Recovery: \`${acc.recovery_email}\`\n` : "") +
@@ -1253,7 +1326,7 @@ async function handleBuy(ctx, index) {
       (acc.notes ? `📝 Notes: ${acc.notes}\n` : "") +
       `\n🔒 Simpan baik-baik kredensial Anda.`;
 
-    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, "✅ Akun ditemukan! Mengirim kredensial...");
+    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, "✅ Pembayaran berhasil! Mengirim kredensial...");
     await ctx.reply(caption, {
       parse_mode: "Markdown",
       reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main"),
@@ -1298,6 +1371,9 @@ async function setupBot() {
     { command: "admin", description: "🛠️ Admin Panel (inventory akun)" },
     { command: "invsearch", description: "🔍 Cari akun inventory" },
     { command: "invbulk", description: "🔁 Bulk action akun (delete/disable/status/move)" },
+    { command: "credit", description: "💳 Cek saldo kredit" },
+    { command: "addcredit", description: "➕ Isi saldo kredit (admin)" },
+    { command: "topupcredit", description: "📥 Minta top up kredit" },
   ]);
 }
 
