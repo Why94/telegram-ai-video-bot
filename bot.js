@@ -1126,7 +1126,17 @@ bot.callbackQuery(/^inv:(.+)$/, async (ctx) => {
 // ─── Inventory Admin: Document Upload Handler ────────────────────────────────
 bot.on("message:document", async (ctx) => {
   const pending = inventory.pendingUploads.get(ctx.from?.id);
-  if (!pending || pending.stage !== "await_file") return; // not an inventory upload
+  if (!pending || pending.stage !== "await_file") {
+    // Guide admin if they send a file outside the upload flow
+    if (inventory.isAdmin(ctx)) {
+      await ctx.reply(
+        "📎 File diterima tapi bukan dalam sesi upload.\n" +
+        "Ketik `/admin` → 📥 Upload CSV / Upload Excel, lalu kirim file kembali.",
+        { parse_mode: "Markdown" }
+      );
+    }
+    return; // not an inventory upload
+  }
   await inventory.handleUpload(ctx);
 });
 
