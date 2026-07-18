@@ -647,10 +647,14 @@ bot.command("tiktok", async (ctx) => {
 bot.command("myid", async (ctx) => {
   const id = ctx.from?.id;
   const isAdmin = inventory.isAdmin(ctx);
+  const envAdmins = (process.env.ADMIN_USER_IDS || "(kosong)").slice(0, 200);
+  const hasKey = process.env.INVENTORY_ENCRYPTION_KEY ? "✅ ter-set" : "❌ kosong";
   await ctx.reply(
     `🆔 *Telegram User ID:* \`${id}\`\n\n` +
     `Status admin: ${isAdmin ? "✅ Sudah terdaftar" : "❌ Belum terdaftar"}\n\n` +
-    (isAdmin ? "" : `Daftarkan ID ini ke variabel \`ADMIN_USER_IDS\` di Railway Variables.`),
+    `🔧 ADMIN_USER_IDS (env): \`${envAdmins}\`\n` +
+    `🔑 INVENTORY_ENCRYPTION_KEY: ${hasKey}\n\n` +
+    (isAdmin ? "" : `Daftarkan ID ini ke variabel \`ADMIN_USER_IDS\` di Railway Variables, lalu redeploy.`),
     { parse_mode: "Markdown" }
   );
 });
