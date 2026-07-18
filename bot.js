@@ -644,6 +644,17 @@ bot.command("tiktok", async (ctx) => {
 });
 
 // ─── Admin Panel: Bulk Account Inventory ────────────────────────────────────
+bot.command("myid", async (ctx) => {
+  const id = ctx.from?.id;
+  const isAdmin = inventory.isAdmin(ctx);
+  await ctx.reply(
+    `🆔 *Telegram User ID:* \`${id}\`\n\n` +
+    `Status admin: ${isAdmin ? "✅ Sudah terdaftar" : "❌ Belum terdaftar"}\n\n` +
+    (isAdmin ? "" : `Daftarkan ID ini ke variabel \`ADMIN_USER_IDS\` di Railway Variables.`),
+    { parse_mode: "Markdown" }
+  );
+});
+
 bot.command("admin", async (ctx) => {
   await inventory.showAdminMenu(ctx);
 });
@@ -1142,6 +1153,7 @@ async function setupBot() {
     { command: "duration", description: "⏱ Set durasi video" },
     { command: "settings", description: "⚙️ Lihat pengaturan" },
     { command: "help", description: "❓ Bantuan" },
+    { command: "myid", description: "🆔 Tampilkan Telegram User ID Anda" },
     { command: "admin", description: "🛠️ Admin Panel (inventory akun)" },
     { command: "invsearch", description: "🔍 Cari akun inventory" },
     { command: "invbulk", description: "🔁 Bulk action akun (delete/disable/status/move)" },
