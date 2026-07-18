@@ -9,6 +9,9 @@ const invDb = require("./lib/inventory/db");
 // ─── Per-user session settings (in-memory) ───────────────────────────────────
 const userSettings = new Map();
 
+// Cache daftar produk untuk menu beli akun (per user)
+const buyMenuCache = new Map();
+
 function getUserSettings(userId) {
   if (!userSettings.has(userId)) {
     userSettings.set(userId, {
@@ -173,12 +176,7 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
       );
       break;
     case "akun":
-      await showPlaceholder(ctx, "🔑 *BELI AKUN*",
-        `Mau beli akun Leonardo AI atau provider lain?\n\n` +
-        `📞 *Kontak Admin:*\n` +
-        `Hubungi via WhatsApp untuk info harga & stok.\n\n` +
-        `🔜 Fitur ini masih dalam pengembangan.`
-      );
+      await showBuyMenu(ctx);
       break;
     case "topup":
       await showPlaceholder(ctx, "💳 *TOP UP*",
@@ -1128,6 +1126,22 @@ bot.callbackQuery(/^inv:(.+)$/, async (ctx) => {
   }
 });
 
+// ─── Buy Account Callbacks ───────────────────────────────────────────────────
+bot.callbackQuery(/^buy:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await showProductDetail(ctx, parseInt(ctx.match[1], 10));
+});
+
+bot.callbackQuery(/^buyconfirm:(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await handleBuy(ctx, parseInt(ctx.match[1], 10));
+});
+
+bot.callbackQuery("buymenu", async (ctx) => {
+  await ctx.answerCallbackQuery();
+  await showBuyMenu(ctx);
+});
+
 // ─── Inventory Admin: Document Upload Handler ────────────────────────────────
 bot.on("message:document", async (ctx) => {
   const pending = inventory.pendingUploads.get(ctx.from?.id);
@@ -1144,6 +1158,111 @@ bot.on("message:document", async (ctx) => {
   }
   await inventory.handleUpload(ctx);
 });
+
+// ─── Buy Account (from inventory DB) ─────────────────────────────────────────
+async function showBuyMenu(ctx) {
+  let products;
+  try {
+    products = inventory.getProductsWithStock();
+  } catch (e) {
+    console.error("[buy] getProductsWithStock failed:", e.message);
+    await ctx.reply("⚠️ Gagal memuat daftar akun. Coba lagi nanti.");
+    return;
+  }
+
+  if (!products.length) {
+    await ctx.reply(
+      "🛒 *BELI AKUN*\n\nBelum ada produk tersedia saat ini.\nSilakan cek kembali nanti atau hubungi admin.",
+      { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main") }
+    );
+    return;
+  }
+
+  const kb = new InlineKeyboard();
+  products.forEach((p, i) => {
+    kb.text(`${p.product_name} (${p.available})`, `buy:${i}`).row();
+  });
+  kb.text("🏠 Menu", "menu:main");
+
+  // store product list in ctx session for lookup by index
+  buyMenuCache.set(ctx.from.id, products);
+
+  await ctx.reply(
+    "🛒 *BELI AKUN DIGITAL*\n\n" +
+    "Pilih produk di bawah. Stok = akun AVAILABLE siap kirim otomatis.\n\n" +
+    products.map((p) => `• ${p.product_name}: ${p.available} tersedia`).join("\n"),
+    { parse_mode: "Markdown", reply_markup: kb }
+  );
+}
+
+async function showProductDetail(ctx, index) {
+  const products = buyMenuCache.get(ctx.from.id) || [];
+  const p = products[index];
+  if (!p) {
+    await ctx.reply("❌ Produk tidak ditemukan. Kembali ke menu.", { reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main") });
+    return;
+  }
+  const kb = new InlineKeyboard()
+    .text("✅ Beli Sekarang", `buyconfirm:${index}`)
+    .row()
+    .text("⬅️ Kembali", "buymenu")
+    .text("🏠 Menu", "menu:main");
+
+  await ctx.reply(
+    `🛒 *${p.product_name}*\n\n` +
+    `📦 Stok tersedia: *${p.available}*\n` +
+    `💡 Akun akan dikirim otomatis setelah konfirmasi.\n\n` +
+    `_Catatan: fitur ini mengambil akun langsung dari inventory admin._`,
+    { parse_mode: "Markdown", reply_markup: kb }
+  );
+}
+
+async function handleBuy(ctx, index) {
+  const products = buyMenuCache.get(ctx.from.id) || [];
+  const p = products[index];
+  if (!p) {
+    await ctx.reply("❌ Produk tidak ditemukan.");
+    return;
+  }
+
+  const statusMsg = await ctx.reply("⏳ Memproses pembelian & mengambil akun...");
+  try {
+    const result = inventory.purchaseAccount(p.product_name, {
+      orderId: `TG-${ctx.from.id}-${Date.now()}`,
+      telegramUserId: String(ctx.from.id),
+    });
+
+    if (!result.success) {
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
+        `❌ Maaf, stok *${p.product_name}* habis. Silakan pilih produk lain.`,
+        { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("⬅️ Kembali", "buymenu") });
+      return;
+    }
+
+    const acc = result.account;
+    const caption =
+      `✅ *AKUN BERHASIL DIBELI*\n\n` +
+      `📦 Produk: *${acc.product_name}*\n` +
+      `📧 Email: \`${acc.email}\`\n` +
+      `🔑 Password: \`${acc.password}\`\n` +
+      (acc.recovery_email ? `📧 Recovery: \`${acc.recovery_email}\`\n` : "") +
+      (acc.recovery_password ? `🔑 Rec. Password: \`${acc.recovery_password}\`\n` : "") +
+      (acc.profile_name ? `👤 Profile: ${acc.profile_name}\n` : "") +
+      (acc.notes ? `📝 Notes: ${acc.notes}\n` : "") +
+      `\n🔒 Simpan baik-baik kredensial Anda.`;
+
+    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, "✅ Akun ditemukan! Mengirim kredensial...");
+    await ctx.reply(caption, {
+      parse_mode: "Markdown",
+      reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main"),
+    });
+  } catch (e) {
+    console.error("[buy] purchase failed:", e);
+    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
+      "❌ Gagal memproses pembelian: " + (e.message || "unknown").replace(/[_*`]/g, ""),
+      { reply_markup: new InlineKeyboard().text("⬅️ Kembali", "buymenu") });
+  }
+}
 
 // ─── Fallback: Unknown text messages ─────────────────────────────────────────
 bot.on("message:text", async (ctx) => {
