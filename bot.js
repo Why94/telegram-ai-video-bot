@@ -717,6 +717,16 @@ bot.command("addcredit", async (ctx) => {
   }
 });
 
+bot.command("env", async (ctx) => {
+  if (!inventory.isAdmin(ctx)) {
+    await ctx.reply("⛔ Akses ditolak.");
+    return;
+  }
+  const keys = ["RAILWAY_ENVIRONMENT","RAILWAY_VOLUME_MOUNT_PATH","RAILWAY_VOLUME_NAME","DATABASE_URL","INVENTORY_DB_PATH","NODE_ENV"];
+  const lines = keys.map((k) => `• ${k}: \`${process.env[k] ? process.env[k].slice(0,40) : "(kosong)"}\``).join("\n");
+  await ctx.reply("🔧 *ENV (Railway)*\n\n" + lines, { parse_mode: "Markdown" });
+});
+
 bot.command("delacc", async (ctx) => {
   if (!inventory.isAdmin(ctx)) {
     await ctx.reply("⛔ Akses ditolak.");
@@ -1704,7 +1714,7 @@ async function setupBot() {
     { command: "invsearch", description: "🔍 Cari akun inventory" },
     { command: "invbulk", description: "🔁 Bulk action akun (delete/disable/status/move)" },
     { command: "credit", description: "💳 Cek saldo kredit" },
-    { command: "delacc", description: "🗑 Hapus akun by email (admin)" },
+    { command: "env", description: "🔧 Cek env Railway (admin)" },
     { command: "topupcredit", description: "📥 Minta top up kredit" },
     { command: "pay", description: "💳 Top up kredit otomatis (Xendit)" },
     { command: "gencost", description: "💡 Cek biaya & sisa generate Leonardo" },
