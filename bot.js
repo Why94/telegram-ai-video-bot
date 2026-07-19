@@ -1439,6 +1439,12 @@ bot.on("message:document", async (ctx) => {
 });
 
 // ─── Buy Account (from inventory DB) ─────────────────────────────────────────
+function formatRupiah(credits) {
+  const rate = config.MANUAL_PAYMENT.ratePerCredit || 1000;
+  const rupiah = Math.round((credits || 0) * rate);
+  return "Rp " + rupiah.toLocaleString("id-ID");
+}
+
 async function showBuyMenu(ctx) {
   let products;
   try {
@@ -1459,7 +1465,7 @@ async function showBuyMenu(ctx) {
 
   const kb = new InlineKeyboard();
   products.forEach((p, i) => {
-    const label = p.price ? `${p.product_name} (${p.available}) • ${p.price}` : `${p.product_name} (${p.available})`;
+    const label = p.price ? `${p.product_name} (${p.available}) • ${formatRupiah(p.price)}` : `${p.product_name} (${p.available})`;
     kb.text(label, `buy:${i}`).row();
   });
   kb.text("🏠 Menu", "menu:main");
@@ -1491,7 +1497,7 @@ async function showProductDetail(ctx, index) {
   await ctx.reply(
     `🛒 *${p.product_name}*\n\n` +
     `📦 Stok tersedia: *${p.available}*\n` +
-    (p.price ? `💰 Harga: *${p.price}*\n` : "") +
+      (p.price ? `💰 Harga: *${formatRupiah(p.price)}*\n` : "") +
     `💡 Akun akan dikirim otomatis setelah konfirmasi.\n\n` +
     `_Catatan: fitur ini mengambil akun langsung dari inventory admin._`,
     { parse_mode: "Markdown", reply_markup: kb }
@@ -1529,7 +1535,7 @@ async function handleBuy(ctx, index) {
         await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
           `❌ *Kredit tidak cukup!*\n\n` +
           `Produk: *${p.product_name}*\n` +
-          `Harga: ${result.needed} kredit\n` +
+          `Harga: ${formatRupiah(result.needed)}\n` +
           `Saldo Anda: ${result.have}\n\n` +
           `Top up dulu untuk lanjut.`,
           { parse_mode: "Markdown", reply_markup: kb });
@@ -1546,7 +1552,7 @@ async function handleBuy(ctx, index) {
     const caption =
       `✅ *AKUN BERHASIL DIBELI*\n\n` +
       `📦 Produk: *${acc.product_name}*\n` +
-      (result.price ? `💰 Harga: ${result.price} kredit\n` : "") +
+      (result.price ? `💰 Harga: ${formatRupiah(result.price)}\n` : "") +
       (result.balance != null ? `💳 Sisa saldo: ${result.balance} kredit\n` : "") +
       `📧 Email: \`${acc.email}\`\n` +
       `🔑 Password: \`${acc.password}\`\n` +
