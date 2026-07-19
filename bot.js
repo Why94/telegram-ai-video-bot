@@ -686,7 +686,7 @@ bot.command("invbulk", async (ctx) => {
 
 // ─── Credit Commands ─────────────────────────────────────────────────────────
 bot.command("credit", async (ctx) => {
-  const bal = inventory.getCredit(ctx.from.id);
+  const bal = await inventory.getCredit(ctx.from.id);
   await ctx.reply(
     `💳 *SALDO KREDIT*\n\n` +
     `👤 User: ${ctx.from?.first_name || ctx.from.id}\n` +
@@ -710,7 +710,7 @@ bot.command("addcredit", async (ctx) => {
     return;
   }
   try {
-    const newBal = inventory.addCredit(target, amount, { adminUserId: String(ctx.from.id) });
+    const newBal = await inventory.addCredit(target, amount, { adminUserId: String(ctx.from.id) });
     await ctx.reply(`✅ Kredit ditambah!\n\nUser: \`${target}\`\nJumlah: +${amount}\nSaldo baru: *${newBal}*`, { parse_mode: "Markdown" });
   } catch (e) {
     await ctx.reply("❌ Gagal: " + e.message.replace(/[_*`]/g, ""));
@@ -739,8 +739,8 @@ bot.command("delacc", async (ctx) => {
   }
   try {
     const db = invDb.getDb();
-    db.run("DELETE FROM accounts WHERE lower(email)=?", [email.toLowerCase()]);
-    invDb.flush();
+    await db.run("DELETE FROM accounts WHERE lower(email)=?", [email.toLowerCase()]);
+    await invDb.flush();
     await ctx.reply("🗑 Akun dihapus: `" + email + "`", { parse_mode: "Markdown" });
   } catch (e) {
     await ctx.reply("❌ " + e.message.replace(/[_*`]/g, ""));
@@ -768,11 +768,11 @@ bot.command("addacc", async (ctx) => {
   try {
     const db = invDb.getDb();
     const enc = invDb.encrypt(password);
-    db.run(
-      "INSERT INTO accounts (product_name,email,password,status,price,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))",
+    await db.run(
+      "INSERT INTO accounts (product_name,email,password,status,price,created_at,updated_at) VALUES (?,?,?,?,?,now()::text,now()::text)",
       [product, email, enc, status, price || null]
     );
-    invDb.flush();
+    await invDb.flush();
     await ctx.reply(`✅ Akun ditambah:\n\`${email}\`\nProduk: ${product}\nStatus: ${status}\nPrice: ${price || "-"}`, { parse_mode: "Markdown" });
   } catch (e) {
     await ctx.reply("❌ " + e.message.replace(/[_*`]/g, ""));
@@ -786,13 +786,13 @@ bot.command("invdb", async (ctx) => {
   }
   try {
     const db = invDb.getDb();
-    const rows = db.exec(
+    const rows = await db.exec(
       "SELECT product_name, status, COUNT(*) c FROM accounts GROUP BY product_name, status ORDER BY product_name, status"
     );
     const lines = rows.length
       ? rows[0].values.map((r) => `• \`${r[0]}\` | ${r[1]} | ${r[2]}`).join("\n")
       : "_(kosong - belum ada akun)_";
-    const hist = db.exec(
+    const hist = await db.exec(
       "SELECT id, filename, imported, skipped, duplicates, invalid_email, invalid_product, failed_rows, created_at FROM import_history ORDER BY id DESC LIMIT 5"
     );
     const histLines = hist.length
@@ -840,8 +840,8 @@ bot.command("topupcredit", async (ctx) => {
 // ─── /gencost (Cek saldo & biaya generate) ───────────────────────────────────
 bot.command("gencost", async (ctx) => {
   const userId = ctx.from.id;
-  inventory.ensureUser(userId, { username: ctx.from?.username, first_name: ctx.from?.first_name });
-  const bal = inventory.getCredit(userId);
+  await inventory.ensureUser(userId, { username: ctx.from?.username, first_name: ctx.from?.first_name });
+  const bal = await inventory.getCredit(userId);
   const cost = parseInt(config.LEONARDO_CREDIT_COST || "2000", 10);
   const canGen = bal >= cost
     ? "✅ Bisa generate *" + Math.floor(bal / cost) + "x*"
@@ -937,7 +937,6 @@ bot.command("pay", async (ctx) => {
 
   inventory.ensureUser(ctx.from.id, { username: ctx.from?.username, first_name: ctx.from?.first_name });
 
-  inventory.ensureUser(ctx.from.id, { username: ctx.from?.username, first_name: ctx.from?.first_name });
   const statusMsg = await ctx.reply("⏳ Membuat invoice pembayaran...");
   try {
     const inv = await payment.createInvoice({
@@ -946,7 +945,7 @@ bot.command("pay", async (ctx) => {
       payerEmail: ctx.from?.username ? `${ctx.from.username}@telegram.local` : undefined,
       metadata: { user_id: String(ctx.from.id), credit_amount: creditAmount, web_app_init_data: webAppInitData || undefined },
     });
-    paymentStore.createPayment({
+    await paymentStore.createPayment({
       userId: ctx.from.id,
       invoiceId: inv.id,
       externalId: inv.externalId,
@@ -1099,14 +1098,14 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   let leonardoApiKey = null;
   const LEONARDO_COST = parseInt(config.LEONARDO_CREDIT_COST || "2000", 10);
   if (providerKey === "leonardo") {
-    const bal = inventory.getCredit(userId);
+    const bal = await inventory.getCredit(userId);
     if (bal < LEONARDO_COST) {
       const msg = `❌ *Saldo tidak cukup!*\n\nUntuk generate Leonardo AI butuh *${LEONARDO_COST} kredit*, saldo kamu: *${bal}*.\nTop up dulu via /pay.`;
       if (statusMsg) await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, msg, { parse_mode: "Markdown" });
       else await ctx.reply(msg, { parse_mode: "Markdown" });
       return;
     }
-    const leo = inventory.reserveLeonardoAccount("Leonardo AI");
+    const leo = await inventory.reserveLeonardoAccount("Leonardo AI");
     if (!leo) {
       const msg = `❌ *Stok akun Leonardo habis!*\n\nHubungi admin untuk restock akun Leonardo AI.`;
       if (statusMsg) await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, msg, { parse_mode: "Markdown" });
@@ -1153,8 +1152,8 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
       try {
         const invDb = require("./lib/inventory/db");
         const db = invDb.getDb();
-        db.run("UPDATE accounts SET status='AVAILABLE', order_id=NULL, telegram_user_id=NULL, updated_at=datetime('now') WHERE status='IN_USE' AND api_key IS NOT NULL");
-        invDb.flush();
+        await db.run("UPDATE accounts SET status='AVAILABLE', order_id=NULL, telegram_user_id=NULL, updated_at=now()::text WHERE status='IN_USE' AND api_key IS NOT NULL");
+        await invDb.flush();
       } catch (e) {}
     }
     await ctx.api.editMessageText(
@@ -1499,7 +1498,7 @@ bot.callbackQuery(/^payneeded:(\d+)$/, async (ctx) => {
       description: `Top up ${needed} kredit`,
       metadata: { user_id: String(ctx.from.id), credit_amount: needed, web_app_init_data: webAppInitData || undefined },
     });
-    paymentStore.createPayment({
+    await paymentStore.createPayment({
       userId: ctx.from.id, invoiceId: inv.id, externalId: inv.externalId,
       amount: amountIdr, creditAmount: needed, metadata: { user_id: String(ctx.from.id), web_app_init_data: webAppInitData || undefined },
     });
@@ -1543,7 +1542,7 @@ function formatRupiah(credits) {
 async function showBuyMenu(ctx) {
   let products;
   try {
-    products = inventory.getProductsWithStock();
+    products = await inventory.getProductsWithStock();
   } catch (e) {
     console.error("[buy] getProductsWithStock failed:", e.message);
     await ctx.reply("⚠️ Gagal memuat daftar akun. Coba lagi nanti.");
@@ -1609,7 +1608,7 @@ async function handleBuy(ctx, index) {
 
   const statusMsg = await ctx.reply("⏳ Memproses pembelian & mengecek saldo kredit...");
   try {
-    const result = inventory.purchaseWithCredit(p.product_name, {
+    const result = await inventory.purchaseWithCredit(p.product_name, {
       telegramUserId: String(ctx.from.id),
       username: ctx.from?.username,
       first_name: ctx.from?.first_name,
@@ -1738,8 +1737,14 @@ function startPaymentServer() {
   });
 }
 
-setupBot()
-  .then(() => invDb.init())
-  .then(() => bot.start())
-  .then(() => startPaymentServer())
-  .catch(() => bot.start());
+(async () => {
+  try {
+    setupBot();
+    await invDb.init();
+    await bot.start();
+    startPaymentServer();
+  } catch (e) {
+    console.error("[startup] failed:", e.message);
+    try { await bot.start(); } catch {}
+  }
+})();
