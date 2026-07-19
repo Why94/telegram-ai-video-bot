@@ -5,12 +5,28 @@ const helpers = require("./lib/telegram-helpers");
 const tiktok = require("./lib/tiktok");
 const inventory = require("./lib/inventory/admin");
 const invDb = require("./lib/inventory/db");
+const payment = require("./lib/payment/xendit");
+const paymentStore = require("./lib/payment/store");
+const paymentServer = require("./lib/payment/server");
 
 // ─── Per-user session settings (in-memory) ───────────────────────────────────
 const userSettings = new Map();
 
 // Cache daftar produk untuk menu beli akun (per user)
 const buyMenuCache = new Map();
+
+// State untuk flow top up manual: userId -> { amount }
+const topupRequests = new Map();
+
+// answerCallbackQuery that never throws (ignores expired/invalid query errors)
+async function safeAnswer(ctx, text) {
+  try {
+    if (text) await safeAnswer(ctx, text);
+    else await safeAnswer(ctx, );
+  } catch (e) {
+    // query too old / invalid — safe to ignore
+  }
+}
 
 function getUserSettings(userId) {
   if (!userSettings.has(userId)) {
@@ -135,7 +151,7 @@ bot.command("start", async (ctx) => {
 // ─── Main Menu Callback Handler ────────────────────────────────────────────
 bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
   const action = ctx.match[1];
-  await ctx.answerCallbackQuery();
+  await safeAnswer(ctx, );
 
   switch (action) {
     case "generate":
@@ -179,15 +195,7 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
       await showBuyMenu(ctx);
       break;
     case "topup":
-      await showPlaceholder(ctx, "💳 *TOP UP*",
-        `Mau isi saldo?\n\n` +
-        `💜 *KIE.ai*: 80 credits gratis (≈8 video)\n` +
-        `🌸 *Pollinations*: 1.5 Pollen/minggu gratis\n\n` +
-        `📞 *Top Up via Admin:* Hubungi WhatsApp.\n\n` +
-        `Atau daftar sendiri:\n` +
-        `• KIE: https://kie.ai/logs\n` +
-        `• Pollinations: https://enter.pollinations.ai`
-      );
+      await showManualTopUp(ctx);
       break;
     case "settings":
       await showSettings(ctx);
@@ -233,7 +241,7 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
 // ─── Model Selection Callback Handler ───────────────────────────────────────
 bot.callbackQuery(/^pilih_model:(.+)$/, async (ctx) => {
   const id = ctx.match[1];
-  await ctx.answerCallbackQuery();
+  await safeAnswer(ctx, );
 
   const item = PRICE_LIST.find(i => i.id === id);
   if (!item) {
@@ -315,28 +323,12 @@ async function showModelPicker(ctx) {
     return { text: label, data: `set_provider:${key}` };
   }
 
-  const keyboard = new InlineKeyboard()
-    .text(providerBtn("kie").text, providerBtn("kie").data)
-    .text(providerBtn("byteplus").text, providerBtn("byteplus").data)
-    .row()
-    .text(providerBtn("replicate").text, providerBtn("replicate").data)
-    .text(providerBtn("runninghub").text, providerBtn("runninghub").data)
-    .row()
-    .text(providerBtn("freetheai").text, providerBtn("freetheai").data)
-    .text(providerBtn("pollinations").text, providerBtn("pollinations").data)
-    .row()
-    .text(providerBtn("kling").text, providerBtn("kling").data)
-    .row()
-    .text(providerBtn("hailuo").text, providerBtn("hailuo").data)
-    .text(providerBtn("luma").text, providerBtn("luma").data)
-    .row()
-    .text(providerBtn("runway").text, providerBtn("runway").data)
-    .text(providerBtn("veo").text, providerBtn("veo").data)
-    .row()
-    .text(providerBtn("leonardo").text, providerBtn("leonardo").data)
-    .text(providerBtn("ernie").text, providerBtn("ernie").data)
-    .row()
-    .text("🏠 Main Menu", "menu:main");
+  const keyboard = new InlineKeyboard();
+  for (const [key, p] of Object.entries(config.PROVIDERS)) {
+    if (p.usable === false) continue;
+    keyboard.text(providerBtn(key).text, providerBtn(key).data).row();
+  }
+  keyboard.text("🏠 Main Menu", "menu:main");
 
   await ctx.reply(
     `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
@@ -344,7 +336,7 @@ async function showModelPicker(ctx) {
     `╰━━━━━━━━━━━━━━━━━━━━━╯\n\n` +
     `📌 *Aktif:* ${PROVIDER_EMOJIS[activeKey] || ""} *${config.PROVIDERS[activeKey].name}*\n` +
     (config.PROVIDERS[activeKey].usable === false ? `⚠️ *Catatan:* ${config.PROVIDERS[activeKey].statusNote}\n` : "") +
-    `\n💜 KIE = siap pakai  |  ❌ = sedang bermasalah\n` +
+    `\n✅ = siap pakai  |  ❌ = sedang bermasalah\n` +
     `👇 Klik untuk berganti:`,
     { parse_mode: "Markdown", reply_markup: keyboard }
   );
@@ -750,6 +742,140 @@ bot.command("topupcredit", async (ctx) => {
   }
 });
 
+// ─── /gencost (Cek saldo & biaya generate) ───────────────────────────────────
+bot.command("gencost", async (ctx) => {
+  const userId = ctx.from.id;
+  inventory.ensureUser(userId, { username: ctx.from?.username, first_name: ctx.from?.first_name });
+  const bal = inventory.getCredit(userId);
+  const cost = parseInt(config.LEONARDO_CREDIT_COST || "2000", 10);
+  const canGen = bal >= cost
+    ? "✅ Bisa generate *" + Math.floor(bal / cost) + "x*"
+    : "❌ Kurang *" + (cost - bal) + "* kredit lagi";
+  await ctx.reply(
+    "💡 *INFO GENERATE LEONARDO AI*\n\n" +
+    "👤 User: `" + userId + "`\n" +
+    "💰 Saldo: *" + bal + " kredit*\n" +
+    "💸 Biaya per generate: *" + cost + " kredit*\n" +
+    "📊 Status: " + canGen + "\n\n" +
+    "Top up saldo: `/pay 100`\nCek saldo: `/credits`",
+    { parse_mode: "Markdown" }
+  );
+});
+
+// ─── Manual Top Up (while Xendit verification pending) ───────────────────────
+function manualPaymentText() {
+  const mp = config.MANUAL_PAYMENT;
+  const rate = mp.ratePerCredit || 1000;
+  let lines = "";
+  for (const m of mp.methods) {
+    lines += "• *" + m.name + "*: `" + m.number + "`\n";
+  }
+  return (
+    "💳 *TOP UP MANUAL*\n\n" +
+    "Rate: *1 kredit = Rp " + rate.toLocaleString("id-ID") + "*\n\n" +
+    "*Cara bayar:*\n" + lines + "\n" +
+    "📞 Admin: `" + mp.adminContact + "`\n" +
+    "📝 " + mp.note + "\n\n" +
+    "Pilih nominal di bawah, lalu kirim *bukti transfer* (screenshot). Admin akan konfirmasi manual."
+  );
+}
+
+async function showManualTopUp(ctx) {
+  const mp = config.MANUAL_PAYMENT;
+  const rate = mp.ratePerCredit || 1000;
+  const text = manualPaymentText();
+  const kb = new InlineKeyboard();
+  const nom = [100, 300, 500, 1000, 2000];
+  for (const n of nom) {
+    kb.text("💰 " + n + " (" + (n * rate / 1000) + "k)", "topup_pick:" + n).row();
+  }
+  kb.text("🏠 Menu", "menu:main");
+  await ctx.reply(text, { parse_mode: "Markdown", reply_markup: kb });
+}
+
+// ─── /pay (Top up via Xendit) ────────────────────────────────────────────────
+// ─── Top Up Manual: pilih nominal ──────────────────────────────────────────
+bot.callbackQuery(/^topup_pick:(\d+)$/, async (ctx) => {
+  await safeAnswer(ctx, );
+  const amount = parseInt(ctx.match[1], 10);
+  if (!amount || amount <= 0) return;
+  topupRequests.set(ctx.from.id, { amount });
+  const rate = config.MANUAL_PAYMENT.ratePerCredit || 1000;
+  const total = amount * rate;
+  await ctx.editMessageText(
+    "📤 *KIRIM BUKTI TRANSFER*\n\n" +
+    "1. Transfer ke rekening admin (lihat menu Top Up).\n" +
+    "2. Kirim screenshot bukti transfer ke chat ini.\n\n" +
+    "Nominal: *" + amount + " kredit* = *Rp " + total.toLocaleString("id-ID") + "*\n\n" +
+    "Admin akan cek & konfirmasi saldo dalam maks 1 jam.",
+    { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main") }
+  );
+});
+
+bot.command("pay", async (ctx) => {
+  const raw = (ctx.match || "").trim();
+  // Support init data dari Mini App: /pay <jumlah> <web_app_init_data>
+  let creditAmount;
+  let webAppInitData = null;
+  const parts = raw.split(/\s+/);
+  if (parts.length >= 1) creditAmount = parseInt(parts[0], 10);
+  if (parts.length >= 2 && parts[1].startsWith("xnd_public_development_")) {
+    webAppInitData = parts[1];
+  }
+  if (!creditAmount || creditAmount <= 0) {
+    await ctx.reply(
+      "💳 *TOP UP OTOMATIS (Xendit)*\n\n" +
+      "Format: `/pay <jumlah_kredit>`\nContoh: `/pay 100`\n\n" +
+      "Anda akan dapat link pembayaran (QRIS/VA). Setelah bayar, kredit masuk otomatis.",
+      { parse_mode: "Markdown" }
+    );
+    return;
+  }
+
+  if (!payment.isConfigured()) {
+    await ctx.reply("⚠️ Payment gateway belum dikonfigurasi. Hubungi admin untuk top up manual (`/topupcredit`).");
+    return;
+  }
+
+  const rate = parseInt(process.env.CREDIT_RATE_IDR || "1000", 10); // 1 credit = Rp1000
+  const amountIdr = creditAmount * rate;
+
+  inventory.ensureUser(ctx.from.id, { username: ctx.from?.username, first_name: ctx.from?.first_name });
+
+  inventory.ensureUser(ctx.from.id, { username: ctx.from?.username, first_name: ctx.from?.first_name });
+  const statusMsg = await ctx.reply("⏳ Membuat invoice pembayaran...");
+  try {
+    const inv = await payment.createInvoice({
+      amount: amountIdr,
+      description: `Top up ${creditAmount} kredit`,
+      payerEmail: ctx.from?.username ? `${ctx.from.username}@telegram.local` : undefined,
+      metadata: { user_id: String(ctx.from.id), credit_amount: creditAmount, web_app_init_data: webAppInitData || undefined },
+    });
+    paymentStore.createPayment({
+      userId: ctx.from.id,
+      invoiceId: inv.id,
+      externalId: inv.externalId,
+      amount: amountIdr,
+      creditAmount,
+      metadata: { user_id: String(ctx.from.id), web_app_init_data: webAppInitData || undefined },
+    });
+    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
+      `💳 *INVOICE DIBUAT*\n\n` +
+      `Kredit: *${creditAmount}*\n` +
+      `Total: Rp ${amountIdr.toLocaleString("id-ID")}\n\n` +
+      `👇 Klik link untuk bayar (QRIS / VA / E-Wallet):`,
+      {
+        parse_mode: "Markdown",
+        reply_markup: new InlineKeyboard().url("💳 Bayar Sekarang", inv.invoiceUrl).text("🏠 Menu", "menu:main"),
+      }
+    );
+  } catch (e) {
+    console.error("[pay] create invoice failed:", e);
+    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
+      "❌ Gagal membuat invoice: " + e.message.replace(/[_*`]/g, ""));
+  }
+});
+
 // ─── /generate Command ──────────────────────────────────────────────────────
 bot.command("generate", async (ctx) => {
   const prompt = ctx.match?.trim();
@@ -795,6 +921,31 @@ bot.command("generate", async (ctx) => {
 // ─── Photo with Caption Handler (Image-to-Video) ────────────────────────────
 bot.on("message:photo", async (ctx) => {
   const caption = ctx.message.caption?.trim();
+
+  // Top Up Manual: foto = bukti transfer, bukan prompt generate
+  const pending = topupRequests.get(ctx.from.id);
+  if (pending) {
+    topupRequests.delete(ctx.from.id);
+    const amount = pending.amount;
+    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+    const admins = (process.env.ADMIN_USER_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const note = caption ? "\n📝 Catatan: " + caption : "";
+    for (const a of admins) {
+      try {
+        await ctx.api.sendPhoto(a, photo.file_id, {
+          caption:
+            "💳 *BUKTI TOP UP MANUAL*\nUser: `" + ctx.from.id + "` (" + (ctx.from?.first_name || "") + ")\n" +
+            "Jumlah: *" + amount + " kredit*\n" + note + "\n\nApprove: `/addcredit " + ctx.from.id + " " + amount + "`",
+          parse_mode: "Markdown",
+        });
+      } catch (e) {}
+    }
+    await ctx.reply(
+      "✅ *Bukti transfer diterima!*\n\nAdmin akan verifikasi & menambah *" + amount + " kredit* ke saldo Anda dalam maks 1 jam.\nTerima kasih!",
+      { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main") }
+    );
+    return;
+  }
 
   if (!caption) {
     await ctx.reply(
@@ -849,6 +1000,27 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
     return;
   }
 
+  // ─── Leonardo AI: reserve account + check credit ─────────────────────────
+  let leonardoApiKey = null;
+  const LEONARDO_COST = parseInt(config.LEONARDO_CREDIT_COST || "2000", 10);
+  if (providerKey === "leonardo") {
+    const bal = inventory.getCredit(userId);
+    if (bal < LEONARDO_COST) {
+      const msg = `❌ *Saldo tidak cukup!*\n\nUntuk generate Leonardo AI butuh *${LEONARDO_COST} kredit*, saldo kamu: *${bal}*.\nTop up dulu via /pay.`;
+      if (statusMsg) await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, msg, { parse_mode: "Markdown" });
+      else await ctx.reply(msg, { parse_mode: "Markdown" });
+      return;
+    }
+    const leo = inventory.reserveLeonardoAccount("Leonardo AI");
+    if (!leo) {
+      const msg = `❌ *Stok akun Leonardo habis!*\n\nHubungi admin untuk restock akun Leonardo AI.`;
+      if (statusMsg) await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, msg, { parse_mode: "Markdown" });
+      else await ctx.reply(msg, { parse_mode: "Markdown" });
+      return;
+    }
+    leonardoApiKey = leo.apiKey;
+  }
+
   // Send initial status
   const isImageProvider = providerKey === "ernie";
   const modeText = isImageProvider ? "✍️ Text-to-Image" : (imageBase64 ? "🖼 Image-to-Video" : "✍️ Text-to-Video");
@@ -876,10 +1048,20 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
     duration: s.duration,
     motion: s.motion,
     generateAudio: s.generateAudio,
+    apiKey: leonardoApiKey,
   });
 
   if (!submitResult.success) {
     const errSafe = submitResult.error.replace(/[_*`]/g, "");
+    // Rollback reserved account so it can be reused
+    if (providerKey === "leonardo" && leonardoApiKey) {
+      try {
+        const invDb = require("./lib/inventory/db");
+        const db = invDb.getDb();
+        db.run("UPDATE accounts SET status='AVAILABLE', order_id=NULL, telegram_user_id=NULL, updated_at=datetime('now') WHERE status='IN_USE' AND api_key IS NOT NULL");
+        invDb.flush();
+      } catch (e) {}
+    }
     await ctx.api.editMessageText(
       ctx.chat.id,
       statusMsg.message_id,
@@ -892,6 +1074,11 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
   }
 
   const taskId = submitResult.taskId;
+
+  // Deduct fixed credit for Leonardo AI generation
+  if (providerKey === "leonardo" && leonardoApiKey) {
+    inventory.deductCredit(userId, LEONARDO_COST);
+  }
 
   // Update status: submitted
   try {
@@ -1027,14 +1214,14 @@ async function handleVideoGeneration(ctx, prompt, imageBase64 = null, existingSt
 bot.callbackQuery(/^set_provider:(.+)$/, async (ctx) => {
   const targetProvider = ctx.match[1];
   if (!config.PROVIDERS[targetProvider]) {
-    await ctx.answerCallbackQuery("Platform tidak dikenal.");
+    await safeAnswer(ctx, "Platform tidak dikenal.");
     return;
   }
 
   const p = config.PROVIDERS[targetProvider];
 
   if (p.usable === false) {
-    await ctx.answerCallbackQuery("❌ Tidak bisa dipakai");
+    await safeAnswer(ctx, "❌ Tidak bisa dipakai");
     await ctx.reply(
       `❌ *${p.name}* tidak bisa digunakan\n\n` +
       `${p.statusNote}\n\n` +
@@ -1049,7 +1236,7 @@ bot.callbackQuery(/^set_provider:(.+)$/, async (ctx) => {
   s.model = p.defaultModel;
 
   const emoji = PROVIDER_EMOJIS[targetProvider] || "🤖";
-  await ctx.answerCallbackQuery(`${p.name} dipilih!`);
+  await safeAnswer(ctx, `${p.name} dipilih!`);
   await showModelDetail(ctx, targetProvider);
 });
 
@@ -1062,7 +1249,7 @@ bot.callbackQuery(/^set_model:(.+):(.+)$/, async (ctx) => {
 
   const p = config.PROVIDERS[providerKey];
   const emoji = PROVIDER_EMOJIS[providerKey] || "🤖";
-  await ctx.answerCallbackQuery(`Model: ${model}`);
+  await safeAnswer(ctx, `Model: ${model}`);
   await ctx.editMessageText(
     `╭━━━━━━━━━━━━━━━━━━━━━╮\n` +
     `┃   ✅ *BERHASIL*     ┃\n` +
@@ -1076,14 +1263,14 @@ bot.callbackQuery(/^set_model:(.+):(.+)$/, async (ctx) => {
 bot.callbackQuery(/^set_ratio:(.+)$/, async (ctx) => {
   const targetRatio = ctx.match[1];
   if (!config.ASPECT_RATIOS.includes(targetRatio)) {
-    await ctx.answerCallbackQuery("Ratio tidak valid.");
+    await safeAnswer(ctx, "Ratio tidak valid.");
     return;
   }
 
   const s = getUserSettings(ctx.from.id);
   s.ratio = targetRatio;
 
-  await ctx.answerCallbackQuery(`Ratio: ${targetRatio}`);
+  await safeAnswer(ctx, `Ratio: ${targetRatio}`);
   await ctx.editMessageText(
     `✅ *Ratio Diubah*\n\n📐 \`${targetRatio}\``,
     { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
@@ -1093,14 +1280,14 @@ bot.callbackQuery(/^set_ratio:(.+)$/, async (ctx) => {
 bot.callbackQuery(/^set_resolution:(.+)$/, async (ctx) => {
   const targetRes = ctx.match[1];
   if (!config.RESOLUTIONS.includes(targetRes)) {
-    await ctx.answerCallbackQuery("Resolusi tidak valid.");
+    await safeAnswer(ctx, "Resolusi tidak valid.");
     return;
   }
 
   const s = getUserSettings(ctx.from.id);
   s.resolution = targetRes;
 
-  await ctx.answerCallbackQuery(`Resolusi: ${targetRes}`);
+  await safeAnswer(ctx, `Resolusi: ${targetRes}`);
   await ctx.editMessageText(
     `✅ *Resolusi Diubah*\n\n🖥️ \`${targetRes}\``,
     { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
@@ -1110,7 +1297,7 @@ bot.callbackQuery(/^set_resolution:(.+)$/, async (ctx) => {
 bot.callbackQuery(/^set_duration:(.+)$/, async (ctx) => {
   const targetDuration = ctx.match[1];
   if (!config.DURATIONS.includes(targetDuration)) {
-    await ctx.answerCallbackQuery("Durasi tidak valid.");
+    await safeAnswer(ctx, "Durasi tidak valid.");
     return;
   }
 
@@ -1118,7 +1305,7 @@ bot.callbackQuery(/^set_duration:(.+)$/, async (ctx) => {
   s.duration = targetDuration;
 
   const durationLabel = targetDuration === "auto" ? "Auto" : `${targetDuration} detik`;
-  await ctx.answerCallbackQuery(`Durasi: ${durationLabel}`);
+  await safeAnswer(ctx, `Durasi: ${durationLabel}`);
   await ctx.editMessageText(
     `✅ *Durasi Diubah*\n\n⏱️ \`${durationLabel}\``,
     { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
@@ -1128,7 +1315,7 @@ bot.callbackQuery(/^set_duration:(.+)$/, async (ctx) => {
 bot.callbackQuery(/^set_motion:(.+)$/, async (ctx) => {
   const targetMotion = ctx.match[1];
   if (!config.MOTION_OPTIONS.includes(targetMotion)) {
-    await ctx.answerCallbackQuery("Motion tidak valid.");
+    await safeAnswer(ctx, "Motion tidak valid.");
     return;
   }
 
@@ -1136,7 +1323,7 @@ bot.callbackQuery(/^set_motion:(.+)$/, async (ctx) => {
   s.motion = targetMotion;
 
   const label = targetMotion === "none" ? "❌ Off" : `🎬 ${targetMotion}`;
-  await ctx.answerCallbackQuery(`Motion: ${label}`);
+  await safeAnswer(ctx, `Motion: ${label}`);
   await ctx.editMessageText(
     `✅ *Motion Diubah*\n\n🎬 \`${label}\``,
     { parse_mode: "Markdown", reply_markup: new InlineKeyboard().text("🏠 Main Menu", "menu:main") }
@@ -1146,7 +1333,7 @@ bot.callbackQuery(/^set_motion:(.+)$/, async (ctx) => {
 // ─── Inventory Admin: Callback Handlers ──────────────────────────────────────
 bot.callbackQuery(/^inv:(.+)$/, async (ctx) => {
   const action = ctx.match[1];
-  await ctx.answerCallbackQuery();
+  await safeAnswer(ctx, );
   if (!inventory.isAdmin(ctx)) {
     await ctx.reply("⛔ Akses ditolak.");
     return;
@@ -1186,18 +1373,47 @@ bot.callbackQuery(/^inv:(.+)$/, async (ctx) => {
 
 // ─── Buy Account Callbacks ───────────────────────────────────────────────────
 bot.callbackQuery(/^buy:(\d+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery();
+  await safeAnswer(ctx, );
   await showProductDetail(ctx, parseInt(ctx.match[1], 10));
 });
 
 bot.callbackQuery(/^buyconfirm:(\d+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery();
+  await safeAnswer(ctx, );
   await handleBuy(ctx, parseInt(ctx.match[1], 10));
 });
 
 bot.callbackQuery("buymenu", async (ctx) => {
-  await ctx.answerCallbackQuery();
+  await safeAnswer(ctx, );
   await showBuyMenu(ctx);
+});
+
+bot.callbackQuery(/^payneeded:(\d+)$/, async (ctx) => {
+  await safeAnswer(ctx, );
+  const needed = parseInt(ctx.match[1], 10);
+  if (!payment.isConfigured()) {
+    await ctx.reply("⚠️ Payment gateway belum dikonfigurasi. Gunakan `/topupcredit " + needed + "` untuk minta top up manual.");
+    return;
+  }
+  const rate = parseInt(process.env.CREDIT_RATE_IDR || "1000", 10);
+  const amountIdr = needed * rate;
+  const webAppInitData = ctx.webAppInitData || null;
+  const statusMsg = await ctx.reply("⏳ Membuat invoice pembayaran...");
+  try {
+    const inv = await payment.createInvoice({
+      amount: amountIdr,
+      description: `Top up ${needed} kredit`,
+      metadata: { user_id: String(ctx.from.id), credit_amount: needed, web_app_init_data: webAppInitData || undefined },
+    });
+    paymentStore.createPayment({
+      userId: ctx.from.id, invoiceId: inv.id, externalId: inv.externalId,
+      amount: amountIdr, creditAmount: needed, metadata: { user_id: String(ctx.from.id), web_app_init_data: webAppInitData || undefined },
+    });
+    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
+      `💳 *INVOICE DIBUAT*\n\nKredit: *${needed}*\nTotal: Rp ${amountIdr.toLocaleString("id-ID")}\n\n👇 Bayar sekarang:`,
+      { parse_mode: "Markdown", reply_markup: new InlineKeyboard().url("💳 Bayar Sekarang", inv.invoiceUrl).text("🏠 Menu", "menu:main") });
+  } catch (e) {
+    await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, "❌ Gagal membuat invoice: " + e.message.replace(/[_*`]/g, ""));
+  }
 });
 
 // ─── Inventory Admin: Document Upload Handler ────────────────────────────────
@@ -1214,7 +1430,12 @@ bot.on("message:document", async (ctx) => {
     }
     return; // not an inventory upload
   }
-  await inventory.handleUpload(ctx);
+  try {
+    await inventory.handleUpload(ctx);
+  } catch (e) {
+    console.error("[inventory] document upload fatal:", e);
+    await ctx.reply("❌ Upload gagal: " + (e.message || "unknown").replace(/[_*`]/g, "").substring(0, 200)).catch(() => {});
+  }
 });
 
 // ─── Buy Account (from inventory DB) ─────────────────────────────────────────
@@ -1299,11 +1520,20 @@ async function handleBuy(ctx, index) {
       if (result.reason === "OUT_OF_STOCK") {
         msg = `❌ Maaf, stok *${p.product_name}* habis. Silakan pilih produk lain.`;
       } else if (result.reason === "INSUFFICIENT_CREDIT") {
-        msg = `❌ *Kredit tidak cukup!*\n\n` +
+        const neededCredit = Math.max(result.needed, 0);
+        const kb = new InlineKeyboard();
+        if (payment.isConfigured()) {
+          kb.text(`💳 Top Up ${neededCredit} Kredit`, `payneeded:${neededCredit}`).row();
+        }
+        kb.text("⬅️ Kembali", "buymenu").text("🏠 Menu", "menu:main");
+        await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
+          `❌ *Kredit tidak cukup!*\n\n` +
           `Produk: *${p.product_name}*\n` +
-          `Harga: ${result.needed}\n` +
+          `Harga: ${result.needed} kredit\n` +
           `Saldo Anda: ${result.have}\n\n` +
-          `Ketik \`/credit\` untuk cek saldo, atau hubungi admin untuk top up.`;
+          `Top up dulu untuk lanjut.`,
+          { parse_mode: "Markdown", reply_markup: kb });
+        return;
       } else {
         msg = `❌ Gagal memproses pembelian.`;
       }
@@ -1331,6 +1561,8 @@ async function handleBuy(ctx, index) {
       parse_mode: "Markdown",
       reply_markup: new InlineKeyboard().text("🏠 Menu", "menu:main"),
     });
+    // Notify admins if stock of any product dropped below threshold
+    inventory.notifyLowStock(ctx.api).catch(() => {});
   } catch (e) {
     console.error("[buy] purchase failed:", e);
     await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id,
@@ -1349,10 +1581,19 @@ bot.on("message:text", async (ctx) => {
 // ─── Error Handler ───────────────────────────────────────────────────────────
 bot.catch((err) => {
   const ctx = err.ctx;
+  const e = err.error;
+  // Ignore benign "callback query too old / invalid" errors — happens when user
+  // clicks an inline button after Telegram's ~3s window expired. Not a real failure.
+  const msg = e && (e.description || e.message || "");
+  if (/query is too old|callback query.*invalid|response timeout expired/i.test(msg)) {
+    console.warn("Ignored expired callback query error");
+    return;
+  }
+  const detail = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e || err);
   console.error(`Error while handling update ${ctx?.update?.update_id}:`);
-  console.error(err.error);
-  if (err.error && err.error.stack) console.error(err.error.stack);
-  if (ctx) ctx.reply("⚠️ Terjadi error internal. Silakan coba lagi nanti.").catch(() => {});
+  console.error(detail);
+  const safe = String(detail).replace(/[_*`]/g, "").split("\n").slice(0, 2).join(" | ").substring(0, 250);
+  if (ctx) ctx.reply("⚠️ Error: " + safe).catch(() => {});
 });
 
 // ─── Start Bot ───────────────────────────────────────────────────────────────
@@ -1374,6 +1615,8 @@ async function setupBot() {
     { command: "credit", description: "💳 Cek saldo kredit" },
     { command: "addcredit", description: "➕ Isi saldo kredit (admin)" },
     { command: "topupcredit", description: "📥 Minta top up kredit" },
+    { command: "pay", description: "💳 Top up kredit otomatis (Xendit)" },
+    { command: "gencost", description: "💡 Cek biaya & sisa generate Leonardo" },
   ]);
 }
 
@@ -1382,7 +1625,20 @@ console.log("🎬 AI Video Generator Bot (Multi-Model)");
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 console.log("🚀 Starting bot...\n");
 
+function startPaymentServer() {
+  if (!payment.isConfigured()) {
+    console.log("💳 Payment gateway: TIDAK dikonfigurasi (XENDIT_API_KEY / XENDIT_WEBHOOK_TOKEN kosong). Fitur /pay nonaktif.");
+    return;
+  }
+  const app = paymentServer.createServer(bot.api);
+  const port = parseInt(process.env.PORT || "3000", 10);
+  app.listen(port, () => {
+    console.log(`💳 Payment webhook server listening on port ${port} (${payment.isConfigured() ? "Xendit" : ""})`);
+  });
+}
+
 setupBot()
   .then(() => invDb.init())
   .then(() => bot.start())
+  .then(() => startPaymentServer())
   .catch(() => bot.start());

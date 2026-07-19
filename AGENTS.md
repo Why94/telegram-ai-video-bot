@@ -86,3 +86,43 @@ providerKey: {
 - Motion control di-inject otomatis di `providers/index.js`
 - KIE I2V auto-detect: kalo ada imageBase64, pake model grok-imagine/image-to-video
 - ❌ di model picker = `usable: false`, klik muncul penjelasan
+
+## ⚠️ CATATAN PENTING — Arsitektur Saat Ini (per 2026-07)
+Bot ini SEKARANG dibatasi HANYA **Leonardo AI** (provider video & inventory akun):
+
+### Provider Video
+- Di `lib/config.js`: hanya `leonardo.usable = true`, semua provider lain `usable: false`.
+- `defaultProvider = "leonardo"`.
+- Menu model picker (`bot.js` `showModelPicker`) auto-loop hanya provider `usable: true`.
+
+### Inventory Akun (dibeli client)
+- `config.ALLOWED_ACCOUNT_PRODUCTS` default `"Leonardo AI"` — hanya produk ini yg tampil di Beli Akun.
+- Set env `ALLOWED_ACCOUNT_PRODUCTS=Leonardo AI,Runway AI` (pisah koma) untuk nambah.
+
+### Generate Image-to-Video (Leonardo)
+- **MEKANISME:** Bot generate PAKAI API KEY TIAP AKUN Leonardo dari inventory (bukan 1 global key).
+- Tiap akun Leonardo HARUS punya kolom `api_key` saat di-import (lihat `data/templates/leonardo_import_example.csv`).
+- Leonardo.ai TIDAK punya login email/password via API — generate wajib pakai API key per akun.
+- Alur: cek saldo → reserve akun `AVAILABLE` (status jadi `IN_USE`) → generate → potong credit tetap.
+- Biaya generate FIXED: `config.LEONARDO_CREDIT_COST` (default 2000 credit), diatur env `LEONARDO_CREDIT_COST`.
+- Fungsi kunci: `inventory.reserveLeonardoAccount(productName)`, `leonardo.js` terima `options.apiKey`.
+- Command `/gencost` untuk cek saldo & biaya generate.
+
+### Peringatan
+- Jangan set `leonardo.usable = true` tanpa mengisi `api_key` di inventory → generate gagal.
+- Akun yang dipakai generate ditandai `IN_USE` (bukan `SOLD`) — bisa dipakai ulang untuk generate berikutnya.
+- Kolom `api_key` terenkripsi (AES-256-GCM) di DB, sama seperti password.
+
+## Roadmap (update)
+- ~~1. GeminiGenAI provider~~ (ditunda — fokus Leonardo dulu)
+- User settings persist (masih in-memory `Map`, hilang saat restart)
+- `/credits` sudah ada; `/gencost` baru ditambah
+
+## Payment: Manual Mode (sambil nunggu verifikasi Xendit)
+Saat Xendit belum aktif, top up pakai **mode manual**:
+- Menu 💳 Top Up → `showManualTopUp()`: tampilkan rekening (`config.MANUAL_PAYMENT`) + pilih nominal.
+- Client klik nominal → `topup_pick:<amount>` → diminta kirim bukti transfer (foto).
+- Saat client kirim foto & punya state di `topupRequests` Map → foto di-forward ke semua admin + notify `/addcredit <user> <amount>`.
+- Admin approve via `/addcredit` → saldo masuk.
+- Env: `MANUAL_DANA`, `MANUAL_OVO`, `MANUAL_BCA`, `MANUAL_PAYMENT_ADMIN`, `CREDIT_RATE_IDR`, atau JSON `MANUAL_PAYMENT_INFO`.
+- `/pay` (Xendit) otomatis mati kalau `XENDIT_API_KEY`/`XENDIT_WEBHOOK_TOKEN` kosong (fallback ke manual).
