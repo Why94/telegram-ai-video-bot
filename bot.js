@@ -717,6 +717,30 @@ bot.command("addcredit", async (ctx) => {
   }
 });
 
+bot.command("invdb", async (ctx) => {
+  if (!inventory.isAdmin(ctx)) {
+    await ctx.reply("⛔ Akses ditolak.");
+    return;
+  }
+  try {
+    const db = invDb.getDb();
+    const rows = db.exec(
+      "SELECT product_name, status, COUNT(*) c FROM accounts GROUP BY product_name, status ORDER BY product_name, status"
+    );
+    const lines = rows.length
+      ? rows[0].values.map((r) => `• \`${r[0]}\` | ${r[1]} | ${r[2]}`).join("\n")
+      : "_(kosong - belum ada akun)_";
+    await ctx.reply(
+      `🗄 *DB INVENTORY DEBUG*\n\n` +
+      `ALLOWED: \`${config.ALLOWED_ACCOUNT_PRODUCTS.join(", ") || "(semua)"}\`\n\n` +
+      `Akun per produk/status:\n${lines}`,
+      { parse_mode: "Markdown" }
+    );
+  } catch (e) {
+    await ctx.reply("❌ " + e.message.replace(/[_*`]/g, ""));
+  }
+});
+
 bot.command("topupcredit", async (ctx) => {
   const raw = (ctx.match || "").trim();
   const amount = parseInt(raw, 10);
@@ -1619,7 +1643,7 @@ async function setupBot() {
     { command: "invsearch", description: "🔍 Cari akun inventory" },
     { command: "invbulk", description: "🔁 Bulk action akun (delete/disable/status/move)" },
     { command: "credit", description: "💳 Cek saldo kredit" },
-    { command: "addcredit", description: "➕ Isi saldo kredit (admin)" },
+    { command: "invdb", description: "🗄 Debug isi DB inventory (admin)" },
     { command: "topupcredit", description: "📥 Minta top up kredit" },
     { command: "pay", description: "💳 Top up kredit otomatis (Xendit)" },
     { command: "gencost", description: "💡 Cek biaya & sisa generate Leonardo" },
