@@ -1539,6 +1539,19 @@ function formatRupiah(credits) {
   return "Rp " + rupiah.toLocaleString("id-ID");
 }
 
+bot.command("testbuy", async (ctx) => {
+  if (!inventory.isAdmin(ctx)) {
+    await ctx.reply("⛔ Akses ditolak.");
+    return;
+  }
+  try {
+    const products = await inventory.getProductsWithStock();
+    await ctx.reply("✅ getProductsWithStock OK:\n" + JSON.stringify(products).slice(0, 1500), { parse_mode: "Markdown" });
+  } catch (e) {
+    await ctx.reply("❌ ERR: " + (e.stack || e.message).replace(/[_*`]/g, "").slice(0, 1500));
+  }
+});
+
 async function showBuyMenu(ctx) {
   let products;
   try {
@@ -1713,7 +1726,7 @@ async function setupBot() {
     { command: "invsearch", description: "🔍 Cari akun inventory" },
     { command: "invbulk", description: "🔁 Bulk action akun (delete/disable/status/move)" },
     { command: "credit", description: "💳 Cek saldo kredit" },
-    { command: "env", description: "🔧 Cek env Railway (admin)" },
+    { command: "testbuy", description: "🧪 Debug getProductsWithStock (admin)" },
     { command: "topupcredit", description: "📥 Minta top up kredit" },
     { command: "pay", description: "💳 Top up kredit otomatis (Xendit)" },
     { command: "gencost", description: "💡 Cek biaya & sisa generate Leonardo" },
