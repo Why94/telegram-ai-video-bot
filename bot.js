@@ -717,20 +717,42 @@ bot.command("addcredit", async (ctx) => {
   }
 });
 
+bot.command("delacc", async (ctx) => {
+  if (!inventory.isAdmin(ctx)) {
+    await ctx.reply("⛔ Akses ditolak.");
+    return;
+  }
+  const email = (ctx.match || "").trim();
+  if (!email) {
+    await ctx.reply("❌ Format: `/delacc <email>`", { parse_mode: "Markdown" });
+    return;
+  }
+  try {
+    const db = invDb.getDb();
+    db.run("DELETE FROM accounts WHERE lower(email)=?", [email.toLowerCase()]);
+    invDb.flush();
+    await ctx.reply("🗑 Akun dihapus: `" + email + "`", { parse_mode: "Markdown" });
+  } catch (e) {
+    await ctx.reply("❌ " + e.message.replace(/[_*`]/g, ""));
+  }
+});
+
 bot.command("addacc", async (ctx) => {
   if (!inventory.isAdmin(ctx)) {
     await ctx.reply("⛔ Akses ditolak.");
     return;
   }
-  // /addacc <email> <password> [product_name] [price] [status]
-  const parts = (ctx.match || "").trim().split(/\s+/);
+  // /addacc <email>|<password>|<product_name>|<price>|<status>
+  // pakai pipe "|" agar product name bisa mengandung spasi
+  const raw = (ctx.match || "").trim();
+  const parts = raw.split("|").map((s) => s.trim());
   const email = parts[0];
   const password = parts[1];
   const product = parts[2] || "Leonardo AI";
   const price = parts[3] || "";
   const status = (parts[4] || "AVAILABLE").toUpperCase();
   if (!email || !password) {
-    await ctx.reply("❌ Format: `/addacc <email> <password> [product] [price] [status]`", { parse_mode: "Markdown" });
+    await ctx.reply("❌ Format: `/addacc <email>|<password>|<product>|<price>|<status>`\nContoh: `/addacc user@gmail.com|pass123|Leonardo AI|8|AVAILABLE`", { parse_mode: "Markdown" });
     return;
   }
   try {
@@ -1682,7 +1704,7 @@ async function setupBot() {
     { command: "invsearch", description: "🔍 Cari akun inventory" },
     { command: "invbulk", description: "🔁 Bulk action akun (delete/disable/status/move)" },
     { command: "credit", description: "💳 Cek saldo kredit" },
-    { command: "addacc", description: "➕ Tambah 1 akun manual (admin)" },
+    { command: "delacc", description: "🗑 Hapus akun by email (admin)" },
     { command: "topupcredit", description: "📥 Minta top up kredit" },
     { command: "pay", description: "💳 Top up kredit otomatis (Xendit)" },
     { command: "gencost", description: "💡 Cek biaya & sisa generate Leonardo" },
