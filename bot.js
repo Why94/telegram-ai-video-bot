@@ -717,6 +717,36 @@ bot.command("addcredit", async (ctx) => {
   }
 });
 
+bot.command("addacc", async (ctx) => {
+  if (!inventory.isAdmin(ctx)) {
+    await ctx.reply("⛔ Akses ditolak.");
+    return;
+  }
+  // /addacc <email> <password> [product_name] [price] [status]
+  const parts = (ctx.match || "").trim().split(/\s+/);
+  const email = parts[0];
+  const password = parts[1];
+  const product = parts[2] || "Leonardo AI";
+  const price = parts[3] || "";
+  const status = (parts[4] || "AVAILABLE").toUpperCase();
+  if (!email || !password) {
+    await ctx.reply("❌ Format: `/addacc <email> <password> [product] [price] [status]`", { parse_mode: "Markdown" });
+    return;
+  }
+  try {
+    const db = invDb.getDb();
+    const enc = invDb.encrypt(password);
+    db.run(
+      "INSERT INTO accounts (product_name,email,password,status,price,created_at,updated_at) VALUES (?,?,?,?,?,datetime('now'),datetime('now'))",
+      [product, email, enc, status, price || null]
+    );
+    invDb.flush();
+    await ctx.reply(`✅ Akun ditambah:\n\`${email}\`\nProduk: ${product}\nStatus: ${status}\nPrice: ${price || "-"}`, { parse_mode: "Markdown" });
+  } catch (e) {
+    await ctx.reply("❌ " + e.message.replace(/[_*`]/g, ""));
+  }
+});
+
 bot.command("invdb", async (ctx) => {
   if (!inventory.isAdmin(ctx)) {
     await ctx.reply("⛔ Akses ditolak.");
@@ -730,10 +760,19 @@ bot.command("invdb", async (ctx) => {
     const lines = rows.length
       ? rows[0].values.map((r) => `• \`${r[0]}\` | ${r[1]} | ${r[2]}`).join("\n")
       : "_(kosong - belum ada akun)_";
+    const hist = db.exec(
+      "SELECT id, filename, imported, skipped, duplicates, invalid_email, invalid_product, failed_rows, created_at FROM import_history ORDER BY id DESC LIMIT 5"
+    );
+    const histLines = hist.length
+      ? hist[0].values
+          .map((h) => `• #${h[0]} ${h[1]}: +${h[2]} | skip ${h[3]} | dup ${h[4]} | invalidE ${h[5]} | invalidP ${h[6]} | failed ${h[7]}`)
+          .join("\n")
+      : "_(belum ada history import)_";
     await ctx.reply(
       `🗄 *DB INVENTORY DEBUG*\n\n` +
       `ALLOWED: \`${config.ALLOWED_ACCOUNT_PRODUCTS.join(", ") || "(semua)"}\`\n\n` +
-      `Akun per produk/status:\n${lines}`,
+      `Akun per produk/status:\n${lines}\n\n` +
+      `🕑 *Import History (5 terakhir):*\n${histLines}`,
       { parse_mode: "Markdown" }
     );
   } catch (e) {
@@ -1643,7 +1682,7 @@ async function setupBot() {
     { command: "invsearch", description: "🔍 Cari akun inventory" },
     { command: "invbulk", description: "🔁 Bulk action akun (delete/disable/status/move)" },
     { command: "credit", description: "💳 Cek saldo kredit" },
-    { command: "invdb", description: "🗄 Debug isi DB inventory (admin)" },
+    { command: "addacc", description: "➕ Tambah 1 akun manual (admin)" },
     { command: "topupcredit", description: "📥 Minta top up kredit" },
     { command: "pay", description: "💳 Top up kredit otomatis (Xendit)" },
     { command: "gencost", description: "💡 Cek biaya & sisa generate Leonardo" },
