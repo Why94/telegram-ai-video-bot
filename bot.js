@@ -22,7 +22,7 @@ const topupRequests = new Map();
 async function safeAnswer(ctx, text) {
   try {
     if (text) await safeAnswer(ctx, text);
-    else await safeAnswer(ctx, );
+    else await safeAnswer(ctx);
   } catch (e) {
     // query too old / invalid — safe to ignore
   }
@@ -151,7 +151,7 @@ bot.command("start", async (ctx) => {
 // ─── Main Menu Callback Handler ────────────────────────────────────────────
 bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
   const action = ctx.match[1];
-  await safeAnswer(ctx, );
+  await safeAnswer(ctx);
 
   switch (action) {
     case "generate":
@@ -241,7 +241,7 @@ bot.callbackQuery(/^menu:(.+)$/, async (ctx) => {
 // ─── Model Selection Callback Handler ───────────────────────────────────────
 bot.callbackQuery(/^pilih_model:(.+)$/, async (ctx) => {
   const id = ctx.match[1];
-  await safeAnswer(ctx, );
+  await safeAnswer(ctx);
 
   const item = PRICE_LIST.find(i => i.id === id);
   if (!item) {
@@ -796,7 +796,7 @@ async function showManualTopUp(ctx) {
 // ─── /pay (Top up via Xendit) ────────────────────────────────────────────────
 // ─── Top Up Manual: pilih nominal ──────────────────────────────────────────
 bot.callbackQuery(/^topup_pick:(\d+)$/, async (ctx) => {
-  await safeAnswer(ctx, );
+  await safeAnswer(ctx);
   const amount = parseInt(ctx.match[1], 10);
   if (!amount || amount <= 0) return;
   topupRequests.set(ctx.from.id, { amount });
@@ -1333,7 +1333,7 @@ bot.callbackQuery(/^set_motion:(.+)$/, async (ctx) => {
 // ─── Inventory Admin: Callback Handlers ──────────────────────────────────────
 bot.callbackQuery(/^inv:(.+)$/, async (ctx) => {
   const action = ctx.match[1];
-  await safeAnswer(ctx, );
+  await safeAnswer(ctx);
   if (!inventory.isAdmin(ctx)) {
     await ctx.reply("⛔ Akses ditolak.");
     return;
@@ -1373,22 +1373,22 @@ bot.callbackQuery(/^inv:(.+)$/, async (ctx) => {
 
 // ─── Buy Account Callbacks ───────────────────────────────────────────────────
 bot.callbackQuery(/^buy:(\d+)$/, async (ctx) => {
-  await safeAnswer(ctx, );
+  await safeAnswer(ctx);
   await showProductDetail(ctx, parseInt(ctx.match[1], 10));
 });
 
 bot.callbackQuery(/^buyconfirm:(\d+)$/, async (ctx) => {
-  await safeAnswer(ctx, );
+  await safeAnswer(ctx);
   await handleBuy(ctx, parseInt(ctx.match[1], 10));
 });
 
 bot.callbackQuery("buymenu", async (ctx) => {
-  await safeAnswer(ctx, );
+  await safeAnswer(ctx);
   await showBuyMenu(ctx);
 });
 
 bot.callbackQuery(/^payneeded:(\d+)$/, async (ctx) => {
-  await safeAnswer(ctx, );
+  await safeAnswer(ctx);
   const needed = parseInt(ctx.match[1], 10);
   if (!payment.isConfigured()) {
     await ctx.reply("⚠️ Payment gateway belum dikonfigurasi. Gunakan `/topupcredit " + needed + "` untuk minta top up manual.");
