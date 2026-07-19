@@ -1525,8 +1525,8 @@ bot.on("message:document", async (ctx) => {
 
 // ─── Buy Account (from inventory DB) ─────────────────────────────────────────
 function formatRupiah(credits) {
-  const rate = config.MANUAL_PAYMENT.ratePerCredit || 1000;
-  const rupiah = Math.round((credits || 0) * rate);
+  const rate = parseInt(process.env.CREDIT_RATE_IDR || "1000", 10) || 1000;
+  const rupiah = Math.round((Number(credits) || 0) * rate);
   return "Rp " + rupiah.toLocaleString("id-ID");
 }
 
